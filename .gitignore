@@ -1,0 +1,35 @@
+# Cargo build output
+/target/
+
+# Cargo lock file — keep for binaries, omit for libraries
+# This is a binary crate, so Cargo.lock is committed.
+# Uncomment the line below if this ever becomes a library crate.
+# Cargo.lock
+
+# Dependency source cache
+**/*.rs.bk
+
+# IDE and editor artifacts
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Environment files — never commit secrets
+.env
+.env.*
+!.env.example
+
+# dotenvz config may contain project names; exclude if preferred
+# .dotenvz.toml
+
+# Compiled test fixtures
+tests/fixtures/target/

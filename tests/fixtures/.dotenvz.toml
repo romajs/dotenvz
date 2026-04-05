@@ -1,0 +1,10 @@
+project = "test-app"
+provider = "macos-keychain"
+default_profile = "dev"
+schema_file = ".env.example"
+import_file = ".env"
+
+[commands]
+dev   = "echo 'dev server'"
+build = "echo 'build'"
+test  = "cargo test"
