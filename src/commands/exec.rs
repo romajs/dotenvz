@@ -7,12 +7,13 @@ use crate::providers::secret_provider::SecretProvider;
 ///
 /// Usage: `dotenvz exec -- <command> [args...]`
 ///
-/// Secrets for the active project and profile are fetched from the provider
-/// and overlaid on top of the current process environment before execution.
+/// Pass `dry_run = true` to print the resolved env keys and command without
+/// actually executing anything.
 pub fn run(
     ctx: &ProjectContext,
     provider: &dyn SecretProvider,
     args: &[String],
+    dry_run: bool,
 ) -> Result<()> {
     if args.is_empty() {
         return Err(DotenvzError::ProcessExec(
@@ -21,6 +22,22 @@ pub fn run(
     }
 
     let env = env_resolver::resolve_env(provider, &ctx.config.project, &ctx.profile)?;
+
+    if dry_run {
+        println!(
+            "[dry-run] Would inject {} secret(s) from project '{}' profile '{}':",
+            env.len(),
+            ctx.config.project,
+            ctx.profile
+        );
+        let mut keys: Vec<&String> = env.keys().collect();
+        keys.sort();
+        for key in keys {
+            println!("  {key}=<redacted>");
+        }
+        println!("[dry-run] Command: {}", args.join(" "));
+        return Ok(());
+    }
 
     let program = &args[0];
     let rest: Vec<&str> = args[1..].iter().map(String::as_str).collect();

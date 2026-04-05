@@ -11,6 +11,10 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub profile: Option<String>,
 
+    /// Print what would happen without making any changes or running processes.
+    #[arg(long, global = true)]
+    pub dry_run: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -18,7 +22,11 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Commands {
     /// Scaffold a `.dotenvz.toml` in the current directory.
-    Init,
+    Init {
+        /// Overwrite an existing `.dotenvz.toml` without prompting.
+        #[arg(long)]
+        force: bool,
+    },
 
     /// Import variables from a `.env` file into the secret provider.
     Import {

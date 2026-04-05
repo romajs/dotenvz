@@ -3,13 +3,14 @@ use crate::errors::Result;
 
 /// Scaffold a `.dotenvz.toml` in the current directory.
 ///
-/// Does nothing if the file already exists, preserving any existing config.
-pub fn run(project_name: Option<&str>) -> Result<()> {
+/// By default, does nothing if the file already exists.
+/// Pass `force = true` to overwrite an existing config.
+pub fn run(project_name: Option<&str>, force: bool) -> Result<()> {
     let cwd = std::env::current_dir()?;
     let config_path = cwd.join(CONFIG_FILENAME);
 
-    if config_path.exists() {
-        eprintln!("warning: .dotenvz.toml already exists — skipping.");
+    if config_path.exists() && !force {
+        eprintln!("warning: .dotenvz.toml already exists — skipping. Use --force to overwrite.");
         return Ok(());
     }
 
@@ -18,6 +19,10 @@ pub fn run(project_name: Option<&str>) -> Result<()> {
             .and_then(|n| n.to_str())
             .unwrap_or("my-app")
     });
+
+    if config_path.exists() && force {
+        eprintln!("warning: overwriting existing .dotenvz.toml (--force)");
+    }
 
     let config = DotenvzConfig::scaffold(name);
     write_config(&config_path, &config)?;

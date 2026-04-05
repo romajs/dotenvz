@@ -4,12 +4,15 @@ use crate::providers::secret_provider::SecretProvider;
 
 /// Import variables from a `.env` file into the secret provider for the active profile.
 ///
-/// The `.env` file is parsed and each key/value pair is stored via the provider.
-/// This is a one-time bootstrap operation — the file is not used at runtime.
+/// Variables with empty values are skipped with a warning.
+/// Pass `dry_run = true` to preview what would be imported without making changes.
+///
+/// This is a one-time bootstrap operation — the `.env` file is never used at runtime.
 pub fn run(
     ctx: &ProjectContext,
     provider: &dyn SecretProvider,
     file_override: Option<&str>,
+    dry_run: bool,
 ) -> Result<()> {
     let import_path = ctx
         .project_dir()
@@ -22,21 +25,45 @@ pub fn run(
         )));
     }
 
-    println!("Importing from {} ...", import_path.display());
+    if dry_run {
+        println!("[dry-run] Would import from: {}", import_path.display());
+    } else {
+        println!("Importing from {} ...", import_path.display());
+    }
 
     let vars = dotenvy::from_path_iter(&import_path)
         .map_err(|e| DotenvzError::Import(e.to_string()))?;
 
-    let mut count = 0usize;
+    let mut imported = 0usize;
+    let mut skipped = 0usize;
+
     for item in vars {
         let (key, value) = item.map_err(|e| DotenvzError::Import(e.to_string()))?;
-        provider.set_secret(&ctx.config.project, &ctx.profile, &key, &value)?;
-        count += 1;
+
+        if value.trim().is_empty() {
+            eprintln!("  skip: {key} (empty value)");
+            skipped += 1;
+            continue;
+        }
+
+        if dry_run {
+            println!("  [dry-run] would set: {key}");
+        } else {
+            provider.set_secret(&ctx.config.project, &ctx.profile, &key, &value)?;
+        }
+        imported += 1;
     }
 
-    println!(
-        "✓ Imported {count} variable(s) into project '{}' profile '{}'",
-        ctx.config.project, ctx.profile
-    );
+    if dry_run {
+        println!(
+            "[dry-run] would import {imported} variable(s) ({skipped} skipped with empty value)"
+        );
+    } else {
+        println!(
+            "✓ Imported {imported} variable(s) into project '{}' profile '{}' ({skipped} skipped)",
+            ctx.config.project, ctx.profile
+        );
+    }
+
     Ok(())
 }

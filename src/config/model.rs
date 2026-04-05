@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
+use crate::errors::{DotenvzError, Result};
+
 /// Top-level config model for `.dotenvz.toml`.
 ///
 /// Placed in the project root; dotenvz walks up the directory tree to find it.
@@ -41,6 +43,8 @@ pub struct DotenvzConfig {
     pub commands: HashMap<String, String>,
 }
 
+const KNOWN_PROVIDERS: &[&str] = &["macos-keychain"];
+
 fn default_provider() -> String {
     "macos-keychain".to_string()
 }
@@ -54,6 +58,26 @@ fn default_import_file() -> String {
 }
 
 impl DotenvzConfig {
+    /// Validate fields after deserialization.
+    ///
+    /// Called by `load_config` to catch configuration errors early with
+    /// descriptive messages before any command runs.
+    pub fn validate(&self) -> Result<()> {
+        if self.project.trim().is_empty() {
+            return Err(DotenvzError::ConfigParse(
+                "`project` field must not be empty".into(),
+            ));
+        }
+        if !KNOWN_PROVIDERS.contains(&self.provider.as_str()) {
+            return Err(DotenvzError::ConfigParse(format!(
+                "Unknown provider `{}`. Supported: {}",
+                self.provider,
+                KNOWN_PROVIDERS.join(", ")
+            )));
+        }
+        Ok(())
+    }
+
     /// Produce a minimal scaffold config for a new project.
     ///
     /// Used by `dotenvz init` to generate the initial `.dotenvz.toml`.
@@ -76,5 +100,43 @@ impl DotenvzConfig {
             import_file: default_import_file(),
             commands,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_accepts_valid_config() {
+        let cfg = DotenvzConfig::scaffold("my-app");
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_empty_project() {
+        let mut cfg = DotenvzConfig::scaffold("x");
+        cfg.project = "   ".to_string();
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("project"));
+    }
+
+    #[test]
+    fn validate_rejects_unknown_provider() {
+        let mut cfg = DotenvzConfig::scaffold("my-app");
+        cfg.provider = "vault".to_string();
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("vault"));
+        assert!(err.to_string().contains("macos-keychain"));
+    }
+
+    #[test]
+    fn scaffold_produces_valid_config() {
+        let cfg = DotenvzConfig::scaffold("test-project");
+        assert_eq!(cfg.project, "test-project");
+        assert_eq!(cfg.provider, "macos-keychain");
+        assert_eq!(cfg.default_profile, "dev");
+        assert!(cfg.commands.contains_key("dev"));
+        assert!(cfg.commands.contains_key("build"));
     }
 }

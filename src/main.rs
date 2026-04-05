@@ -1,17 +1,15 @@
-mod cli;
-mod commands;
-mod config;
-mod core;
-mod errors;
-mod providers;
-
 use clap::Parser;
-use cli::{Cli, Commands};
-use crate::core::command_resolver::{resolve_command, ResolvedCommand};
-use crate::core::{env_resolver, process_runner};
-use crate::core::project_context::ProjectContext;
-use errors::DotenvzError;
-use providers::secret_provider::SecretProvider;
+use dotenvz::{
+    cli::{Cli, Commands},
+    commands,
+    core::{
+        command_resolver::{resolve_command, ResolvedCommand},
+        env_resolver, process_runner,
+        project_context::ProjectContext,
+    },
+    errors::{self, DotenvzError},
+    providers::secret_provider::SecretProvider,
+};
 
 fn main() {
     if let Err(e) = run() {
@@ -29,7 +27,7 @@ fn build_provider() -> errors::Result<Box<dyn SecretProvider>> {
 
     #[cfg(target_os = "macos")]
     {
-        use providers::macos_keychain::MacOsKeychainProvider;
+        use dotenvz::providers::macos_keychain::MacOsKeychainProvider;
         Ok(Box::new(MacOsKeychainProvider::new()))
     }
 }
@@ -38,8 +36,8 @@ fn run() -> errors::Result<()> {
     let cli = Cli::parse();
 
     // `init` does not require a loaded project context or provider.
-    if let Commands::Init = cli.command {
-        return commands::init::run(None);
+    if let Commands::Init { force } = cli.command {
+        return commands::init::run(None, force);
     }
 
     // All other commands require a resolved project context.
@@ -49,10 +47,10 @@ fn run() -> errors::Result<()> {
     let provider = build_provider()?;
 
     match cli.command {
-        Commands::Init => unreachable!("handled above"),
+        Commands::Init { .. } => unreachable!("handled above"),
 
         Commands::Import { file } => {
-            commands::import::run(&ctx, provider.as_ref(), file.as_deref())
+            commands::import::run(&ctx, provider.as_ref(), file.as_deref(), cli.dry_run)
         }
 
         Commands::Set { key, value } => {
@@ -65,7 +63,9 @@ fn run() -> errors::Result<()> {
 
         Commands::Rm { key } => commands::rm::run(&ctx, provider.as_ref(), &key),
 
-        Commands::Exec { args } => commands::exec::run(&ctx, provider.as_ref(), &args),
+        Commands::Exec { args } => {
+            commands::exec::run(&ctx, provider.as_ref(), &args, cli.dry_run)
+        }
 
         // Alias: first arg is the alias name; remaining args are forwarded.
         Commands::Alias(parts) => {
@@ -75,12 +75,27 @@ fn run() -> errors::Result<()> {
 
             match resolve_command(alias_name, Some(&ctx.config)) {
                 Some(ResolvedCommand::Alias { resolved, .. }) => {
-                    let env = env_resolver::resolve_env(
-                        provider.as_ref(),
-                        &ctx.config.project,
-                        &ctx.profile,
-                    )?;
-                    process_runner::run_command_string(&resolved, &env)
+                    if cli.dry_run {
+                        println!("[dry-run] alias `{alias_name}` → `{resolved}`");
+                        let env = env_resolver::resolve_env(
+                            provider.as_ref(),
+                            &ctx.config.project,
+                            &ctx.profile,
+                        )?;
+                        let mut keys: Vec<_> = env.keys().collect();
+                        keys.sort();
+                        for key in keys {
+                            println!("  {key}=<redacted>");
+                        }
+                        Ok(())
+                    } else {
+                        let env = env_resolver::resolve_env(
+                            provider.as_ref(),
+                            &ctx.config.project,
+                            &ctx.profile,
+                        )?;
+                        process_runner::run_command_string(&resolved, &env)
+                    }
                 }
                 _ => Err(DotenvzError::UnknownCommand(alias_name.clone())),
             }

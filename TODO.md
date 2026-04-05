@@ -24,62 +24,61 @@ Practical implementation roadmap. Items are ordered roughly by dependency.
 
 ## Phase 1 — Config and context
 
-- [ ] Unit tests for `config/loader.rs`: parse fixture, round-trip write/read
-- [ ] Unit tests for `core/command_resolver.rs`: builtin and alias cases
-- [ ] Unit tests for `core/project_context.rs`: walk-up directory search
-- [ ] Handle malformed `.dotenvz.toml` with clear user-facing error messages
-- [ ] Validate `provider` field value; error early on unknown providers
+- [x] Unit tests for `config/loader.rs`: parse fixture, round-trip write/read
+- [x] Unit tests for `core/command_resolver.rs`: builtin and alias cases
+- [x] Unit tests for `core/project_context.rs`: walk-up directory search
+- [x] Handle malformed `.dotenvz.toml` with clear user-facing error messages
+- [x] Validate `provider` field value; error early on unknown providers
 
 ---
 
 ## Phase 2 — In-memory mock provider
 
-- [ ] Add `providers/mock.rs` implementing `SecretProvider` with a `HashMap` backend
-- [ ] Use mock provider in unit and integration tests
-- [ ] Test `set_secret` / `get_secret` / `list_secrets` / `delete_secret` via mock
-- [ ] Test `env_resolver::resolve_env` with mock provider
-- [ ] Test `process_runner::run_process` injects env correctly
+- [x] Add `providers/mock.rs` implementing `SecretProvider` with a `HashMap` backend
+- [x] Use mock provider in unit and integration tests
+- [x] Test `set_secret` / `get_secret` / `list_secrets` / `delete_secret` via mock
+- [x] Test `env_resolver::resolve_env` with mock provider
+- [x] Test `process_runner::run_process` injects env correctly
 
 ---
 
 ## Phase 3 — macOS Keychain provider
 
-- [ ] Implement `MacOsKeychainProvider::set_secret` using `security-framework`
-- [ ] Implement `MacOsKeychainProvider::get_secret`
-- [ ] Implement `MacOsKeychainProvider::list_secrets` (query by service prefix)
-- [ ] Implement `MacOsKeychainProvider::delete_secret`
-- [ ] Handle Keychain permission / auth errors gracefully
+- [x] Implement `MacOsKeychainProvider::set_secret` using `security-framework`
+- [x] Implement `MacOsKeychainProvider::get_secret`
+- [x] Implement `MacOsKeychainProvider::list_secrets` (key registry pattern)
+- [x] Implement `MacOsKeychainProvider::delete_secret`
+- [x] Handle Keychain permission / auth errors gracefully (`errSecItemNotFound`, `errSecDuplicateItem`)
 - [ ] Manual smoke tests against the real macOS Keychain
 
 ---
 
 ## Phase 4 — `dotenvz import`
 
-- [ ] Finish `commands/import.rs` — wire to real Keychain provider
-- [ ] Skip keys with empty values (warn, don't fail)
-- [ ] Support `--dry-run` flag to preview what would be imported
-- [ ] Integration test using the fixture `.env` and mock provider
+- [x] Finish `commands/import.rs` — wire to real Keychain provider
+- [x] Skip keys with empty values (warn, don't fail)
+- [x] Support `--dry-run` flag to preview what would be imported
+- [x] Integration test using the fixture `.env` and mock provider
 
 ---
 
 ## Phase 5 — Env resolution and exec
 
-- [ ] Wire `commands/exec.rs` to real Keychain provider
-- [ ] Test alias execution end-to-end with mock provider
-- [ ] Handle `program not found` errors with a helpful message
-- [ ] Add `--dry-run` to `exec` / alias commands to print env without running
+- [x] Wire `commands/exec.rs` to real Keychain provider
+- [x] Test alias execution end-to-end with mock provider
+- [x] Handle `program not found` errors with a helpful message
+- [x] Add `--dry-run` to `exec` / alias commands to print env without running
 
 ---
 
 ## Phase 6 — Polish and integration tests
 
-- [ ] Improve shell-word splitting in `process_runner::run_command_string`
-  (consider the `shell-words` crate to handle quoted arguments)
-- [ ] Add `src/lib.rs` to expose internals for integration tests
-- [ ] Integration test: `init` → `import` → `list` → `exec` with mock provider
+- [x] Improve shell-word splitting in `process_runner::run_command_string` (`shell-words` crate)
+- [x] Add `src/lib.rs` to expose internals for integration tests
+- [x] Integration test: `init` → `import` → `list` → `exec` with mock provider
+- [x] `dotenvz init --force` flag to allow overwriting existing config
 - [ ] Better output formatting (consider `colored` or `indicatif` for UX)
 - [ ] `dotenvz --version` and `dotenvz help <command>` polish
-- [ ] `dotenvz init --force` flag to allow overwriting existing config
 
 ---
 
