@@ -4,16 +4,31 @@
 
 [![CI](https://github.com/romajs/dotenvz/actions/workflows/ci.yml/badge.svg)](https://github.com/romajs/dotenvz/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Rust: stable](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-informational.svg)]()
 
-`dotenvz` is a Rust CLI that stores your project's environment variables in the
-**native OS secret store** and injects them into child processes at runtime.
+`dotenvz` is a Rust CLI that stores your project's environment variables in a
+secret backend and injects them into child processes at runtime.
 It has no runtime dependency on `.env` files — those are used only during
 initial import/bootstrap.
+
+**OS providers** (default, zero-config):
 
 | Platform | Secret backend |
 |----------|----------------|
 | macOS    | Apple Keychain (`security-framework`) |
 | Linux    | Secret Service via D-Bus (`secret-service` crate) |
 | Windows  | Credential Manager (`windows-sys` Win32 API) |
+
+<!--
+**Cloud providers** (read-only, declared in `.dotenvz.toml`):
+
+| Provider key              | Backend                        |
+|---------------------------|--------------------------------|
+| `aws-secrets-manager`     | AWS Secrets Manager            |
+| `gcp-secret-manager`      | Google Cloud Secret Manager    |
+| `azure-key-vault`         | Azure Key Vault                |
+
+**Custom providers** — any executable that speaks the dotenvz JSON protocol
+(`type = "exec"` in `.dotenvz.toml`).
+-->
 
 ---
 
@@ -27,6 +42,8 @@ initial import/bootstrap.
 
 - Rust-based CLI binary
 - macOS, Linux, and Windows — each backed by the native secret store
+<!--- Cloud provider backends: AWS Secrets Manager, GCP Secret Manager, Azure Key Vault -->
+<!--- Custom exec providers — delegate to any local executable over JSON stdin/stdout -->
 - Per-project config via `.dotenvz.toml`
 - `dotenvz init` auto-detects the current OS and writes the correct `provider` value
 - Named command aliases with automatic env injection (`dotenvz dev`, `dotenvz build`)
@@ -40,8 +57,9 @@ initial import/bootstrap.
 - Docker secret bridge
 - Biometric / auth customization
 - VS Code extension integration
-- Cloud sync / team sharing
+- Team sharing / syncing secrets between developers
 - Encrypted file storage as a runtime secret store
+<!--- Writing secrets to cloud providers (cloud backends are read-only in the current release) -->
 
 ---
 
@@ -74,11 +92,44 @@ test  = "cargo test"
 | Field | Description |
 |---|---|
 | `project` | Unique identifier used as the secret namespace |
-| `provider` | Backend — `"macos-keychain"`, `"linux-secret-service"`, or `"windows-credential"` (auto-set by `dotenvz init`) |
+| `provider` | Default backend — `"macos-keychain"`, `"linux-secret-service"`, or `"windows-credential"` (auto-set by `dotenvz init`) |
 | `default_profile` | Profile used when `--profile` is not specified |
 | `schema_file` | Path to a file listing expected keys (future validation) |
 | `import_file` | `.env` file used by `dotenvz import` |
 | `[commands]` | Named aliases: `dotenvz <name>` → command string with env injected |
+
+<!--
+### Using a cloud provider
+
+Declare a named provider under `[providers.<name>]` and reference it from a profile:
+
+```toml
+[providers.aws]
+type   = "aws-secrets-manager"
+region = "us-east-1"
+prefix = "my-app/dev"
+
+[profiles.dev]
+provider = "aws"
+```
+
+Cloud providers use **ambient credentials** (IAM role, ADC, Managed Identity) —
+no credentials are stored in `.dotenvz.toml`. See [`docs/CLOUD_PROVIDERS_OVERVIEW.md`](docs/CLOUD_PROVIDERS_OVERVIEW.md).
+
+### Using a custom exec provider
+
+```toml
+[providers.vault]
+type       = "exec"
+command    = "/usr/local/bin/my-vault-bridge"
+timeout_ms = 5000
+
+[profiles.dev]
+provider = "vault"
+```
+
+See [`docs/CUSTOM_PROVIDER_PROTOCOL.md`](docs/CUSTOM_PROVIDER_PROTOCOL.md) for the JSON wire protocol.
+-->
 
 ---
 
@@ -167,8 +218,42 @@ src/
   commands/            — one file per CLI command
   config/              — .dotenvz.toml model + loader
   core/                — project context, resolver, process runner
-  providers/           — SecretProvider trait + macOS / Linux / Windows impls
+  providers/
+    secret_provider.rs — SecretProvider trait
+    macos_keychain.rs  — macOS Keychain (Security.framework)
+    linux_secret_service.rs — Linux Secret Service (D-Bus)
+    windows_credential.rs   — Windows Credential Manager (Win32)
+    mock.rs            — in-memory backend for tests
+<!--
+    exec.rs            — custom exec provider (JSON subprocess protocol)
+    aws_secrets_manager.rs  — AWS Secrets Manager
+    gcp_secret_manager.rs   — Google Cloud Secret Manager
+    azure_key_vault.rs      — Azure Key Vault
+-->
 tests/
   fixtures/            — sample config and .env for tests
   integration_test.rs
 ```
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Full architecture, module map, execution flow, provider categories |
+| [`docs/OS_PROVIDERS_OVERVIEW.md`](docs/OS_PROVIDERS_OVERVIEW.md) | Overview of all three OS providers and how they compare |
+| [`docs/PROVIDER_SPEC_MACOS.md`](docs/PROVIDER_SPEC_MACOS.md) | macOS Keychain provider — storage layout, operation flow, error handling |
+| [`docs/PROVIDER_SPEC_LINUX.md`](docs/PROVIDER_SPEC_LINUX.md) | Linux Secret Service provider — D-Bus, GNOME Keyring, KWallet |
+| [`docs/PROVIDER_SPEC_WINDOWS.md`](docs/PROVIDER_SPEC_WINDOWS.md) | Windows Credential Manager provider — Win32 Cred* API |
+| [`docs/IMPLEMENTATION_GUIDE.md`](docs/IMPLEMENTATION_GUIDE.md) | Implementation notes, security considerations, testing approach |
+| [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md) | Test plan covering unit, integration, and platform smoke tests |
+
+<!--
+| [`docs/CLOUD_PROVIDERS_OVERVIEW.md`](docs/CLOUD_PROVIDERS_OVERVIEW.md) | Cloud providers overview — auth model, read-only design, execution flow |
+| [`docs/PROVIDER_SPEC_AWS.md`](docs/PROVIDER_SPEC_AWS.md) | AWS Secrets Manager provider spec |
+| [`docs/PROVIDER_SPEC_GCP.md`](docs/PROVIDER_SPEC_GCP.md) | Google Cloud Secret Manager provider spec |
+| [`docs/PROVIDER_SPEC_AZURE.md`](docs/PROVIDER_SPEC_AZURE.md) | Azure Key Vault provider spec |
+| [`docs/CUSTOM_PROVIDER_PROTOCOL.md`](docs/CUSTOM_PROVIDER_PROTOCOL.md) | Exec provider JSON wire protocol for custom backends |
+| [`docs/DOTENVZ_CONFIG_EXTENSIONS.md`](docs/DOTENVZ_CONFIG_EXTENSIONS.md) | Config reference for exec and cloud provider declarations |
+-->

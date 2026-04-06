@@ -1,13 +1,8 @@
 # Architecture — dotenvz
 
-## Overview
-
-`dotenvz` is a single Rust binary that:
-
-1. Reads a per-project `.dotenvz.toml` config from the nearest ancestor directory.
-2. Resolves the active profile (CLI flag → config default).
-3. Selects the `SecretProvider` implementation for the current OS (Apple Keychain on macOS, Secret Service on Linux, Credential Manager on Windows).
-4. Either manages individual secrets or injects the full env map into a child process.
+> **This file has moved.**
+> The canonical architecture document is at [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> This file is kept at the repository root only for discoverability.
 
 ---
 
