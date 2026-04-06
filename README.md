@@ -1,32 +1,38 @@
 # dotenvz
 
-> Universal CLI for secure environment injection via Apple Keychain.
+> Cross-platform CLI for secure environment injection via the OS secret store.
 
 `dotenvz` is a Rust CLI that stores your project's environment variables in the
-**macOS Keychain** and injects them into child processes at runtime. It is not a
-Node.js library and has no runtime dependency on `.env` files — those are used
-only during initial import/bootstrap.
+**native OS secret store** and injects them into child processes at runtime.
+It has no runtime dependency on `.env` files — those are used only during
+initial import/bootstrap.
+
+| Platform | Secret backend |
+|----------|----------------|
+| macOS    | Apple Keychain (`security-framework`) |
+| Linux    | Secret Service via D-Bus (`secret-service` crate) |
+| Windows  | Credential Manager (`windows-sys` Win32 API) |
 
 ---
 
 ## Key principle
 
-> **The macOS Keychain is the source of truth. `.env` files are for bootstrapping only.**
+> **The OS secret store is the source of truth. `.env` files are for bootstrapping only.**
 
 ---
 
-## MVP Scope
+## Scope
 
 - Rust-based CLI binary
-- macOS only — Apple Keychain as the secret store
+- macOS, Linux, and Windows — each backed by the native secret store
 - Per-project config via `.dotenvz.toml`
+- `dotenvz init` auto-detects the current OS and writes the correct `provider` value
 - Named command aliases with automatic env injection (`dotenvz dev`, `dotenvz build`)
 - Explicit exec mode: `dotenvz exec -- <command> [args...]`
-- One-time import from `.env` into Keychain (`dotenvz import`)
+- One-time import from `.env` into the secret store (`dotenvz import`)
 
-## Non-goals (MVP)
+## Non-goals
 
-- Linux / Windows support
 - Shell hooks (`.bashrc`, `.zshrc` integration)
 - Node.js runtime import integration
 - Docker secret bridge
@@ -65,8 +71,8 @@ test  = "cargo test"
 
 | Field | Description |
 |---|---|
-| `project` | Unique identifier used as the Keychain namespace |
-| `provider` | Backend — currently only `"macos-keychain"` |
+| `project` | Unique identifier used as the secret namespace |
+| `provider` | Backend — `"macos-keychain"`, `"linux-secret-service"`, or `"windows-credential"` (auto-set by `dotenvz init`) |
 | `default_profile` | Profile used when `--profile` is not specified |
 | `schema_file` | Path to a file listing expected keys (future validation) |
 | `import_file` | `.env` file used by `dotenvz import` |
@@ -111,16 +117,41 @@ dotenvz --profile staging exec -- ./deploy.sh
 
 ## How secrets are stored
 
-Secrets are stored as **Generic Password** items in the macOS login Keychain:
+Secrets are isolated by project **and** profile, so `DATABASE_URL` can coexist
+safely across `dev`, `staging`, and `production` on all platforms.
+
+### macOS — Apple Keychain
 
 | Keychain attribute | Value |
 |---|---|
 | Service (`kSecAttrService`) | `dotenvz.<project>.<profile>` |
 | Account (`kSecAttrAccount`) | The env key (e.g. `DATABASE_URL`) |
-| Password (`kSecValueData`) | The env value |
+| Password (`kSecValueData`) | The env value (UTF-8) |
 
-This means secrets are isolated by project **and** profile, so `DATABASE_URL`
-can coexist safely across `dev`, `staging`, and `production`.
+### Linux — Secret Service (D-Bus / GNOME Keyring / KWallet)
+
+Each secret is stored as an item in the default collection with these attributes:
+
+| Item attribute | Value |
+|---|---|
+| `application` | `dotenvz` |
+| `project` | The project name |
+| `profile` | The active profile |
+| `key` | The env key |
+| Secret value | The env value (UTF-8) |
+
+> **Note:** A running Secret Service daemon (e.g. `gnome-keyring-daemon` or
+> `kwallet`) is required. dotenvz exits with a clear error if D-Bus is
+> unavailable.
+
+### Windows — Credential Manager
+
+| Credential attribute | Value |
+|---|---|
+| Type | `CRED_TYPE_GENERIC` |
+| TargetName | `dotenvz/<project>/<profile>/<key>` |
+| CredentialBlob | The env value (UTF-8) |
+| Persist | `CRED_PERSIST_LOCAL_MACHINE` |
 
 ---
 
@@ -134,7 +165,7 @@ src/
   commands/            — one file per CLI command
   config/              — .dotenvz.toml model + loader
   core/                — project context, resolver, process runner
-  providers/           — SecretProvider trait + macOS Keychain impl
+  providers/           — SecretProvider trait + macOS / Linux / Windows impls
 tests/
   fixtures/            — sample config and .env for tests
   integration_test.rs

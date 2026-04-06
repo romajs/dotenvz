@@ -82,6 +82,20 @@ Practical implementation roadmap. Items are ordered roughly by dependency.
 
 ---
 
+## Phase 7 — Cross-platform providers
+
+- [x] Add `secret-service` (Linux) and `windows-sys` (Windows) platform-gated deps to `Cargo.toml`
+- [x] Update `KNOWN_PROVIDERS` and `default_provider()` in `config/model.rs` to cover all three OSes
+- [x] `dotenvz init` auto-detects OS and writes correct `provider` value via `cfg!()` macros
+- [x] Implement `LinuxSecretServiceProvider` (`providers/linux_secret_service.rs`) using `secret_service::blocking`
+- [x] Implement `WindowsCredentialProvider` (`providers/windows_credential.rs`) using `windows-sys` Win32 FFI
+- [x] Non-native stubs return `DotenvzError::UnsupportedPlatform` on wrong OS
+- [x] Expand GitHub Actions CI matrix to `[macos-latest, ubuntu-latest, windows-latest]`
+- [ ] Manual smoke tests on Linux (Secret Service / GNOME Keyring)
+- [ ] Manual smoke tests on Windows (Credential Manager)
+
+---
+
 ## Future (post-MVP)
 
 - [ ] Profile inheritance (`staging` inherits `dev` and overlays)
@@ -89,6 +103,4 @@ Practical implementation roadmap. Items are ordered roughly by dependency.
 - [ ] `dotenvz diff --profile staging` — compare profiles
 - [ ] Shell hook: `eval "$(dotenvz hook zsh)"`
 - [ ] Cloud provider backend (AWS Secrets Manager, 1Password CLI, etc.)
-- [ ] Linux support (e.g. libsecret / GNOME Keyring)
-- [ ] Windows support (Credential Manager)
 - [ ] Team sharing / sync
