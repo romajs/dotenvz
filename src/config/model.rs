@@ -147,7 +147,7 @@ mod tests {
     fn scaffold_produces_valid_config() {
         let cfg = DotenvzConfig::scaffold("test-project");
         assert_eq!(cfg.project, "test-project");
-        assert_eq!(cfg.provider, "macos-keychain");
+        assert_eq!(cfg.provider, default_provider());
         assert_eq!(cfg.default_profile, "dev");
         assert!(cfg.commands.contains_key("dev"));
         assert!(cfg.commands.contains_key("build"));

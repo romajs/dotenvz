@@ -107,7 +107,7 @@ dev = "next dev"
         let raw = r#"project = "minimal""#;
         let path = write_toml(dir.path(), raw);
         let cfg = load_config(&path).unwrap();
-        assert_eq!(cfg.provider, "macos-keychain");
+        assert_eq!(cfg.provider, DotenvzConfig::scaffold("").provider);
         assert_eq!(cfg.default_profile, "dev");
         assert_eq!(cfg.import_file, ".env");
     }
