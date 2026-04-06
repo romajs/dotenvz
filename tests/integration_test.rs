@@ -135,7 +135,7 @@ fn full_flow_init_import_list_exec() {
 
     // 1. init
     let _ = dotenvz::commands::init::run(Some("full-flow-app"), false).is_err(); // runs in cwd, not tmpdir
-                                                                         // Write config directly since we can't change cwd in a safe test.
+                                                                                 // Write config directly since we can't change cwd in a safe test.
     let config = DotenvzConfig::scaffold("full-flow-app");
     write_config(&dir.path().join(CONFIG_FILENAME), &config).unwrap();
 
