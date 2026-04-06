@@ -170,8 +170,9 @@ impl SecretProvider for MacOsKeychainProvider {
                 }
             })
             .and_then(|bytes| {
-                String::from_utf8(bytes)
-                    .map_err(|e| DotenvzError::Provider(format!("Invalid UTF-8 in secret `{key}`: {e}")))
+                String::from_utf8(bytes).map_err(|e| {
+                    DotenvzError::Provider(format!("Invalid UTF-8 in secret `{key}`: {e}"))
+                })
             })
     }
 
@@ -200,17 +201,16 @@ impl SecretProvider for MacOsKeychainProvider {
 
     fn delete_secret(&self, project: &str, profile: &str, key: &str) -> Result<()> {
         let service = Self::service_name(project, profile);
-        security_framework::passwords::delete_generic_password(&service, key)
-            .map_err(|e| {
-                if e.code() == ERR_SEC_ITEM_NOT_FOUND {
-                    DotenvzError::KeyNotFound {
-                        key: key.to_string(),
-                        profile: profile.to_string(),
-                    }
-                } else {
-                    DotenvzError::Provider(e.to_string())
+        security_framework::passwords::delete_generic_password(&service, key).map_err(|e| {
+            if e.code() == ERR_SEC_ITEM_NOT_FOUND {
+                DotenvzError::KeyNotFound {
+                    key: key.to_string(),
+                    profile: profile.to_string(),
                 }
-            })?;
+            } else {
+                DotenvzError::Provider(e.to_string())
+            }
+        })?;
         Self::registry_remove(&service, key)
     }
 }

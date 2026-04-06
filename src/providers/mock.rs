@@ -86,7 +86,8 @@ mod tests {
     #[test]
     fn set_and_get_round_trip() {
         let p = provider();
-        p.set_secret("proj", "dev", "DB_URL", "postgres://localhost").unwrap();
+        p.set_secret("proj", "dev", "DB_URL", "postgres://localhost")
+            .unwrap();
         let v = p.get_secret("proj", "dev", "DB_URL").unwrap();
         assert_eq!(v, "postgres://localhost");
     }
@@ -148,8 +149,12 @@ mod tests {
     fn profiles_are_isolated() {
         let p = provider();
         p.set_secret("proj", "dev", "KEY", "dev-val").unwrap();
-        p.set_secret("proj", "staging", "KEY", "staging-val").unwrap();
+        p.set_secret("proj", "staging", "KEY", "staging-val")
+            .unwrap();
         assert_eq!(p.get_secret("proj", "dev", "KEY").unwrap(), "dev-val");
-        assert_eq!(p.get_secret("proj", "staging", "KEY").unwrap(), "staging-val");
+        assert_eq!(
+            p.get_secret("proj", "staging", "KEY").unwrap(),
+            "staging-val"
+        );
     }
 }

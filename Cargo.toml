@@ -28,5 +28,13 @@ shell-words = "1"
 security-framework = "2"
 core-foundation = "0.9"
 
+# Linux Secret Service — D-Bus / GNOME Keyring / KWallet via pure-Rust zbus.
+[target.'cfg(target_os = "linux")'.dependencies]
+secret-service = { version = "5", features = ["rt-tokio-crypto-rust"] }
+
+# Windows Credential Manager — Win32 Cred* APIs.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Security_Credentials", "Win32_Foundation"] }
+
 [dev-dependencies]
 tempfile = "3"

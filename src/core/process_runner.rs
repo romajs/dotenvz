@@ -8,8 +8,9 @@ use crate::errors::{DotenvzError, Result};
 /// The command string is split using `shell-words` so that quoted arguments and
 /// escaped characters are handled correctly — e.g. `next dev --port "3000"`.
 pub fn run_command_string(command_str: &str, env: &HashMap<String, String>) -> Result<()> {
-    let parts = shell_words::split(command_str)
-        .map_err(|e| DotenvzError::ProcessExec(format!("Failed to parse command `{command_str}`: {e}")))?;
+    let parts = shell_words::split(command_str).map_err(|e| {
+        DotenvzError::ProcessExec(format!("Failed to parse command `{command_str}`: {e}"))
+    })?;
 
     let (program, rest) = parts
         .split_first()
@@ -25,11 +26,7 @@ pub fn run_command_string(command_str: &str, env: &HashMap<String, String>) -> R
 /// overlaid on top, allowing secrets to override or supplement existing vars.
 ///
 /// Returns a descriptive error if the program is not found or exits non-zero.
-pub fn run_process(
-    program: &str,
-    args: &[&str],
-    env: &HashMap<String, String>,
-) -> Result<()> {
+pub fn run_process(program: &str, args: &[&str], env: &HashMap<String, String>) -> Result<()> {
     let status = Command::new(program)
         .args(args)
         .envs(env)

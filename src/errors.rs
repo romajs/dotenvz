@@ -27,7 +27,7 @@ pub enum DotenvzError {
     #[error("Import error: {0}")]
     Import(String),
 
-    #[error("dotenvz currently supports macOS only")]
+    #[error("this platform is not yet supported by dotenvz (supported: macOS, Linux, Windows)")]
     UnsupportedPlatform,
 }
 

@@ -1,5 +1,5 @@
-use crate::core::{env_resolver, process_runner};
 use crate::core::project_context::ProjectContext;
+use crate::core::{env_resolver, process_runner};
 use crate::errors::{DotenvzError, Result};
 use crate::providers::secret_provider::SecretProvider;
 

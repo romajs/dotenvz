@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::errors::{DotenvzError, Result};
 use super::model::DotenvzConfig;
+use crate::errors::{DotenvzError, Result};
 
 /// The canonical config filename.
 pub const CONFIG_FILENAME: &str = ".dotenvz.toml";

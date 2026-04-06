@@ -18,18 +18,25 @@ fn main() {
     }
 }
 
-/// Instantiate the active secret provider based on the current platform.
-///
-/// Only macOS / Apple Keychain is supported in this MVP.
+/// Instantiate the active secret provider for the current platform.
 fn build_provider() -> errors::Result<Box<dyn SecretProvider>> {
-    #[cfg(not(target_os = "macos"))]
-    return Err(DotenvzError::UnsupportedPlatform);
-
     #[cfg(target_os = "macos")]
     {
         use dotenvz::providers::macos_keychain::MacOsKeychainProvider;
-        Ok(Box::new(MacOsKeychainProvider::new()))
+        return Ok(Box::new(MacOsKeychainProvider::new()));
     }
+    #[cfg(target_os = "linux")]
+    {
+        use dotenvz::providers::linux_secret_service::LinuxSecretServiceProvider;
+        return Ok(Box::new(LinuxSecretServiceProvider::new()));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use dotenvz::providers::windows_credential::WindowsCredentialProvider;
+        return Ok(Box::new(WindowsCredentialProvider::new()));
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    Err(DotenvzError::UnsupportedPlatform)
 }
 
 fn run() -> errors::Result<()> {
@@ -53,9 +60,7 @@ fn run() -> errors::Result<()> {
             commands::import::run(&ctx, provider.as_ref(), file.as_deref(), cli.dry_run)
         }
 
-        Commands::Set { key, value } => {
-            commands::set::run(&ctx, provider.as_ref(), &key, &value)
-        }
+        Commands::Set { key, value } => commands::set::run(&ctx, provider.as_ref(), &key, &value),
 
         Commands::Get { key } => commands::get::run(&ctx, provider.as_ref(), &key),
 
@@ -63,15 +68,13 @@ fn run() -> errors::Result<()> {
 
         Commands::Rm { key } => commands::rm::run(&ctx, provider.as_ref(), &key),
 
-        Commands::Exec { args } => {
-            commands::exec::run(&ctx, provider.as_ref(), &args, cli.dry_run)
-        }
+        Commands::Exec { args } => commands::exec::run(&ctx, provider.as_ref(), &args, cli.dry_run),
 
         // Alias: first arg is the alias name; remaining args are forwarded.
         Commands::Alias(parts) => {
-            let alias_name = parts.first().ok_or_else(|| {
-                DotenvzError::UnknownCommand("<empty>".into())
-            })?;
+            let alias_name = parts
+                .first()
+                .ok_or_else(|| DotenvzError::UnknownCommand("<empty>".into()))?;
 
             match resolve_command(alias_name, Some(&ctx.config)) {
                 Some(ResolvedCommand::Alias { resolved, .. }) => {

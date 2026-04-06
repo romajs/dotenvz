@@ -1,8 +1,7 @@
 use crate::config::DotenvzConfig;
 
 /// Names of every built-in command handled directly by the CLI.
-pub const BUILTIN_COMMANDS: &[&str] =
-    &["init", "import", "set", "get", "list", "rm", "exec"];
+pub const BUILTIN_COMMANDS: &[&str] = &["init", "import", "set", "get", "list", "rm", "exec"];
 
 /// The result of resolving a top-level CLI argument.
 #[derive(Debug, Clone)]

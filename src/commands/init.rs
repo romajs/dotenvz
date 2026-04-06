@@ -14,11 +14,8 @@ pub fn run(project_name: Option<&str>, force: bool) -> Result<()> {
         return Ok(());
     }
 
-    let name = project_name.unwrap_or_else(|| {
-        cwd.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("my-app")
-    });
+    let name = project_name
+        .unwrap_or_else(|| cwd.file_name().and_then(|n| n.to_str()).unwrap_or("my-app"));
 
     if config_path.exists() && force {
         eprintln!("warning: overwriting existing .dotenvz.toml (--force)");

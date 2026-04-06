@@ -31,8 +31,8 @@ pub fn run(
         println!("Importing from {} ...", import_path.display());
     }
 
-    let vars = dotenvy::from_path_iter(&import_path)
-        .map_err(|e| DotenvzError::Import(e.to_string()))?;
+    let vars =
+        dotenvy::from_path_iter(&import_path).map_err(|e| DotenvzError::Import(e.to_string()))?;
 
     let mut imported = 0usize;
     let mut skipped = 0usize;

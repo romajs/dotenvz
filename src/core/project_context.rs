@@ -30,8 +30,7 @@ impl ProjectContext {
     /// Walks up from `start` to find the nearest `.dotenvz.toml`, then loads
     /// and validates the config.
     pub fn resolve_from(start: &Path, profile_override: Option<&str>) -> Result<Self> {
-        let config_path =
-            find_config_file(start).ok_or(DotenvzError::ConfigNotFound)?;
+        let config_path = find_config_file(start).ok_or(DotenvzError::ConfigNotFound)?;
 
         let config = load_config(&config_path)?;
 

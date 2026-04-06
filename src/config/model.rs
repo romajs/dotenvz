@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::errors::{DotenvzError, Result};
 
@@ -43,10 +43,23 @@ pub struct DotenvzConfig {
     pub commands: HashMap<String, String>,
 }
 
-const KNOWN_PROVIDERS: &[&str] = &["macos-keychain"];
+const KNOWN_PROVIDERS: &[&str] = &[
+    "macos-keychain",
+    "linux-secret-service",
+    "windows-credential",
+];
 
 fn default_provider() -> String {
-    "macos-keychain".to_string()
+    if cfg!(target_os = "macos") {
+        "macos-keychain"
+    } else if cfg!(target_os = "linux") {
+        "linux-secret-service"
+    } else if cfg!(target_os = "windows") {
+        "windows-credential"
+    } else {
+        "macos-keychain"
+    }
+    .to_string()
 }
 
 fn default_profile() -> String {

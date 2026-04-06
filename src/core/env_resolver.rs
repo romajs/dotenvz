@@ -27,9 +27,11 @@ mod tests {
     #[test]
     fn resolve_env_returns_all_provider_secrets() {
         let p = InMemoryProvider::new();
-        p.set_secret("app", "dev", "DB_URL", "postgres://localhost").unwrap();
+        p.set_secret("app", "dev", "DB_URL", "postgres://localhost")
+            .unwrap();
         p.set_secret("app", "dev", "PORT", "5432").unwrap();
-        p.set_secret("app", "prod", "DB_URL", "postgres://prod").unwrap(); // different profile
+        p.set_secret("app", "prod", "DB_URL", "postgres://prod")
+            .unwrap(); // different profile
 
         let env = resolve_env(&p, "app", "dev").unwrap();
         assert_eq!(env.len(), 2);
