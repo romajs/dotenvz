@@ -223,3 +223,124 @@ impl crate::providers::secret_provider::SecretProvider for WindowsCredentialProv
         Err(crate::errors::DotenvzError::UnsupportedPlatform)
     }
 }
+
+// ── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::secret_provider::SecretProvider;
+
+    // ── Stub tests (compile and run on every non-Windows OS, e.g. macOS CI) ─
+
+    #[cfg(not(target_os = "windows"))]
+    mod stub {
+        use super::*;
+        use crate::errors::DotenvzError;
+
+        fn p() -> WindowsCredentialProvider {
+            WindowsCredentialProvider::new()
+        }
+
+        #[test]
+        fn set_secret_returns_unsupported_platform() {
+            let err = p().set_secret("proj", "dev", "KEY", "val").unwrap_err();
+            assert!(matches!(err, DotenvzError::UnsupportedPlatform));
+        }
+
+        #[test]
+        fn get_secret_returns_unsupported_platform() {
+            let err = p().get_secret("proj", "dev", "KEY").unwrap_err();
+            assert!(matches!(err, DotenvzError::UnsupportedPlatform));
+        }
+
+        #[test]
+        fn list_secrets_returns_unsupported_platform() {
+            let err = p().list_secrets("proj", "dev").unwrap_err();
+            assert!(matches!(err, DotenvzError::UnsupportedPlatform));
+        }
+
+        #[test]
+        fn delete_secret_returns_unsupported_platform() {
+            let err = p().delete_secret("proj", "dev", "KEY").unwrap_err();
+            assert!(matches!(err, DotenvzError::UnsupportedPlatform));
+        }
+    }
+
+    // ── Live tests (Windows only — Credential Manager is always available) ──
+
+    #[cfg(target_os = "windows")]
+    mod live {
+        use super::*;
+        use crate::errors::DotenvzError;
+
+        const PROJECT: &str = "dotenvz-test";
+        const PROFILE: &str = "ci";
+
+        fn p() -> WindowsCredentialProvider {
+            WindowsCredentialProvider::new()
+        }
+
+        #[test]
+        fn set_get_delete_round_trip() {
+            let p = p();
+            p.set_secret(PROJECT, PROFILE, "WC_TEST_KEY", "hello-windows")
+                .unwrap();
+            let v = p.get_secret(PROJECT, PROFILE, "WC_TEST_KEY").unwrap();
+            assert_eq!(v, "hello-windows");
+            p.delete_secret(PROJECT, PROFILE, "WC_TEST_KEY").unwrap();
+            // Verify it is gone.
+            assert!(matches!(
+                p.get_secret(PROJECT, PROFILE, "WC_TEST_KEY").unwrap_err(),
+                DotenvzError::KeyNotFound { .. }
+            ));
+        }
+
+        #[test]
+        fn list_secrets_scoped_by_project_and_profile() {
+            let p = p();
+            p.set_secret(PROJECT, PROFILE, "WC_A", "v-a").unwrap();
+            p.set_secret(PROJECT, PROFILE, "WC_B", "v-b").unwrap();
+            // Different profile — must not appear in PROFILE listing.
+            p.set_secret(PROJECT, "other", "WC_A", "other").unwrap();
+
+            let map = p.list_secrets(PROJECT, PROFILE).unwrap();
+            assert_eq!(map.get("WC_A"), Some(&"v-a".to_string()));
+            assert_eq!(map.get("WC_B"), Some(&"v-b".to_string()));
+            assert!(!map.contains_key("other"));
+
+            // Cleanup.
+            let _ = p.delete_secret(PROJECT, PROFILE, "WC_A");
+            let _ = p.delete_secret(PROJECT, PROFILE, "WC_B");
+            let _ = p.delete_secret(PROJECT, "other", "WC_A");
+        }
+
+        #[test]
+        fn set_overwrites_existing_value() {
+            let p = p();
+            p.set_secret(PROJECT, PROFILE, "WC_OVERWRITE", "old")
+                .unwrap();
+            p.set_secret(PROJECT, PROFILE, "WC_OVERWRITE", "new")
+                .unwrap();
+            let v = p.get_secret(PROJECT, PROFILE, "WC_OVERWRITE").unwrap();
+            assert_eq!(v, "new");
+            let _ = p.delete_secret(PROJECT, PROFILE, "WC_OVERWRITE");
+        }
+
+        #[test]
+        fn get_missing_key_returns_key_not_found() {
+            let err = p()
+                .get_secret(PROJECT, PROFILE, "WC_NONEXISTENT_XYZ")
+                .unwrap_err();
+            assert!(matches!(err, DotenvzError::KeyNotFound { .. }));
+        }
+
+        #[test]
+        fn delete_missing_key_returns_key_not_found() {
+            let err = p()
+                .delete_secret(PROJECT, PROFILE, "WC_GHOST_XYZ")
+                .unwrap_err();
+            assert!(matches!(err, DotenvzError::KeyNotFound { .. }));
+        }
+    }
+}

@@ -243,3 +243,130 @@ impl crate::providers::secret_provider::SecretProvider for LinuxSecretServicePro
         Err(crate::errors::DotenvzError::UnsupportedPlatform)
     }
 }
+
+// ── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::secret_provider::SecretProvider;
+
+    // ── Stub tests (compile and run on every non-Linux OS, e.g. macOS CI) ───
+
+    #[cfg(not(target_os = "linux"))]
+    mod stub {
+        use super::*;
+        use crate::errors::DotenvzError;
+
+        fn p() -> LinuxSecretServiceProvider {
+            LinuxSecretServiceProvider::new()
+        }
+
+        #[test]
+        fn set_secret_returns_unsupported_platform() {
+            let err = p().set_secret("proj", "dev", "KEY", "val").unwrap_err();
+            assert!(matches!(err, DotenvzError::UnsupportedPlatform));
+        }
+
+        #[test]
+        fn get_secret_returns_unsupported_platform() {
+            let err = p().get_secret("proj", "dev", "KEY").unwrap_err();
+            assert!(matches!(err, DotenvzError::UnsupportedPlatform));
+        }
+
+        #[test]
+        fn list_secrets_returns_unsupported_platform() {
+            let err = p().list_secrets("proj", "dev").unwrap_err();
+            assert!(matches!(err, DotenvzError::UnsupportedPlatform));
+        }
+
+        #[test]
+        fn delete_secret_returns_unsupported_platform() {
+            let err = p().delete_secret("proj", "dev", "KEY").unwrap_err();
+            assert!(matches!(err, DotenvzError::UnsupportedPlatform));
+        }
+    }
+
+    // ── Live tests (Linux only — require a running Secret Service daemon) ───
+    // Run with: cargo test -- --include-ignored
+
+    #[cfg(target_os = "linux")]
+    mod live {
+        use super::*;
+        use crate::errors::DotenvzError;
+
+        const PROJECT: &str = "dotenvz-test";
+        const PROFILE: &str = "ci";
+
+        fn p() -> LinuxSecretServiceProvider {
+            LinuxSecretServiceProvider::new()
+        }
+
+        #[test]
+        #[ignore = "requires a running Secret Service daemon (gnome-keyring / KWallet)"]
+        fn set_get_delete_round_trip() {
+            let p = p();
+            p.set_secret(PROJECT, PROFILE, "LSS_TEST_KEY", "hello-linux")
+                .unwrap();
+            let v = p.get_secret(PROJECT, PROFILE, "LSS_TEST_KEY").unwrap();
+            assert_eq!(v, "hello-linux");
+            p.delete_secret(PROJECT, PROFILE, "LSS_TEST_KEY").unwrap();
+            // Verify it is gone.
+            assert!(matches!(
+                p.get_secret(PROJECT, PROFILE, "LSS_TEST_KEY").unwrap_err(),
+                DotenvzError::KeyNotFound { .. }
+            ));
+        }
+
+        #[test]
+        #[ignore = "requires a running Secret Service daemon (gnome-keyring / KWallet)"]
+        fn list_secrets_scoped_by_project_and_profile() {
+            let p = p();
+            p.set_secret(PROJECT, PROFILE, "LSS_A", "v-a").unwrap();
+            p.set_secret(PROJECT, PROFILE, "LSS_B", "v-b").unwrap();
+            // Different profile — must not appear in PROFILE listing.
+            p.set_secret(PROJECT, "other", "LSS_A", "other").unwrap();
+
+            let map = p.list_secrets(PROJECT, PROFILE).unwrap();
+            assert_eq!(map.get("LSS_A"), Some(&"v-a".to_string()));
+            assert_eq!(map.get("LSS_B"), Some(&"v-b".to_string()));
+            assert!(!map.contains_key("other"));
+
+            // Cleanup.
+            let _ = p.delete_secret(PROJECT, PROFILE, "LSS_A");
+            let _ = p.delete_secret(PROJECT, PROFILE, "LSS_B");
+            let _ = p.delete_secret(PROJECT, "other", "LSS_A");
+        }
+
+        #[test]
+        #[ignore = "requires a running Secret Service daemon (gnome-keyring / KWallet)"]
+        fn get_missing_key_returns_key_not_found() {
+            let err = p()
+                .get_secret(PROJECT, PROFILE, "LSS_NONEXISTENT_XYZ")
+                .unwrap_err();
+            assert!(matches!(err, DotenvzError::KeyNotFound { .. }));
+        }
+
+        #[test]
+        #[ignore = "requires a running Secret Service daemon (gnome-keyring / KWallet)"]
+        fn delete_missing_key_returns_key_not_found() {
+            let err = p()
+                .delete_secret(PROJECT, PROFILE, "LSS_GHOST_XYZ")
+                .unwrap_err();
+            assert!(matches!(err, DotenvzError::KeyNotFound { .. }));
+        }
+
+        #[test]
+        #[ignore = "requires a running Secret Service daemon (gnome-keyring / KWallet)"]
+        fn set_overwrites_existing_value() {
+            let p = p();
+            p.set_secret(PROJECT, PROFILE, "LSS_OVERWRITE", "old")
+                .unwrap();
+            p.set_secret(PROJECT, PROFILE, "LSS_OVERWRITE", "new")
+                .unwrap();
+            let v = p.get_secret(PROJECT, PROFILE, "LSS_OVERWRITE").unwrap();
+            assert_eq!(v, "new");
+            let _ = p.delete_secret(PROJECT, PROFILE, "LSS_OVERWRITE");
+        }
+    }
+}
