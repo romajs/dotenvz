@@ -2,6 +2,8 @@
 
 > Cross-platform CLI for secure environment injection via the OS secret store.
 
+[![CI](https://github.com/romajs/dotenvz/actions/workflows/ci.yml/badge.svg)](https://github.com/romajs/dotenvz/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Rust: stable](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-informational.svg)]()
+
 `dotenvz` is a Rust CLI that stores your project's environment variables in the
 **native OS secret store** and injects them into child processes at runtime.
 It has no runtime dependency on `.env` files — those are used only during
