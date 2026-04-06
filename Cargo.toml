@@ -3,7 +3,7 @@ name = "dotenvz"
 version = "0.1.0"
 edition = "2021"
 description = "Universal CLI for secure env injection via Apple Keychain"
-license = "MIT"
+license = "LicenseRef-Proprietary"
 
 [lib]
 name = "dotenvz"
