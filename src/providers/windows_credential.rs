@@ -24,6 +24,12 @@ impl WindowsCredentialProvider {
     }
 }
 
+impl Default for WindowsCredentialProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // ── Windows implementation ──────────────────────────────────────────────────
 
 #[cfg(target_os = "windows")]

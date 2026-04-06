@@ -28,6 +28,12 @@ impl LinuxSecretServiceProvider {
     }
 }
 
+impl Default for LinuxSecretServiceProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // ── Linux implementation ────────────────────────────────────────────────────
 
 #[cfg(target_os = "linux")]

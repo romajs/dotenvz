@@ -28,11 +28,14 @@ use crate::errors::{DotenvzError, Result};
 use crate::providers::secret_provider::SecretProvider;
 
 /// The account name used to store the list of registered secret keys.
+#[cfg(target_os = "macos")]
 const REGISTRY_ACCOUNT: &str = "__dotenvz_idx__";
 
 /// macOS errSecItemNotFound status code.
+#[cfg(target_os = "macos")]
 const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
 /// macOS errSecDuplicateItem status code.
+#[cfg(target_os = "macos")]
 const ERR_SEC_DUPLICATE_ITEM: i32 = -25299;
 
 /// Secret provider backed by the macOS login Keychain.
@@ -41,13 +44,6 @@ pub struct MacOsKeychainProvider;
 impl MacOsKeychainProvider {
     pub fn new() -> Self {
         Self
-    }
-
-    /// Build the Keychain service name from project and profile.
-    ///
-    /// Format: `dotenvz.<project>.<profile>`
-    fn service_name(project: &str, profile: &str) -> String {
-        format!("dotenvz.{project}.{profile}")
     }
 }
 
@@ -63,6 +59,13 @@ impl Default for MacOsKeychainProvider {
 
 #[cfg(target_os = "macos")]
 impl MacOsKeychainProvider {
+    /// Build the Keychain service name from project and profile.
+    ///
+    /// Format: `dotenvz.<project>.<profile>`
+    fn service_name(project: &str, profile: &str) -> String {
+        format!("dotenvz.{project}.{profile}")
+    }
+
     /// Read the current list of registered key names for a service.
     fn read_registry(service: &str) -> Vec<String> {
         match security_framework::passwords::get_generic_password(service, REGISTRY_ACCOUNT) {

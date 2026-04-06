@@ -23,17 +23,17 @@ fn build_provider() -> errors::Result<Box<dyn SecretProvider>> {
     #[cfg(target_os = "macos")]
     {
         use dotenvz::providers::macos_keychain::MacOsKeychainProvider;
-        return Ok(Box::new(MacOsKeychainProvider::new()));
+        Ok(Box::new(MacOsKeychainProvider::new()))
     }
     #[cfg(target_os = "linux")]
     {
         use dotenvz::providers::linux_secret_service::LinuxSecretServiceProvider;
-        return Ok(Box::new(LinuxSecretServiceProvider::new()));
+        Ok(Box::new(LinuxSecretServiceProvider::new()))
     }
     #[cfg(target_os = "windows")]
     {
         use dotenvz::providers::windows_credential::WindowsCredentialProvider;
-        return Ok(Box::new(WindowsCredentialProvider::new()));
+        Ok(Box::new(WindowsCredentialProvider::new()))
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     Err(DotenvzError::UnsupportedPlatform)
