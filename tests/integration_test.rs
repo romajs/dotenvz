@@ -68,7 +68,10 @@ fn import_dry_run_does_not_persist() {
     dotenvz::commands::import::run(&ctx, &provider, None, true).unwrap();
 
     // Dry-run must not write anything.
-    assert!(provider.list_secrets("dry-run-test", "dev").unwrap().is_empty());
+    assert!(provider
+        .list_secrets("dry-run-test", "dev")
+        .unwrap()
+        .is_empty());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,8 +81,12 @@ fn import_dry_run_does_not_persist() {
 #[test]
 fn env_resolver_returns_only_scoped_secrets() {
     let provider = InMemoryProvider::new();
-    provider.set_secret("app", "dev", "HOST", "localhost").unwrap();
-    provider.set_secret("app", "prod", "HOST", "prod.example.com").unwrap();
+    provider
+        .set_secret("app", "dev", "HOST", "localhost")
+        .unwrap();
+    provider
+        .set_secret("app", "prod", "HOST", "prod.example.com")
+        .unwrap();
 
     let env = env_resolver::resolve_env(&provider, "app", "dev").unwrap();
     assert_eq!(env.get("HOST").unwrap(), "localhost");
@@ -93,7 +100,9 @@ fn exec_dry_run_does_not_run_process() {
     write_config(&dir.path().join(CONFIG_FILENAME), &config).unwrap();
 
     let provider = InMemoryProvider::new();
-    provider.set_secret("exec-test", "dev", "MY_SECRET", "abc").unwrap();
+    provider
+        .set_secret("exec-test", "dev", "MY_SECRET", "abc")
+        .unwrap();
 
     let ctx = ProjectContext::resolve_from(dir.path(), None).unwrap();
     let args = vec!["false".to_string()]; // `false` exits 1 — should never run
@@ -126,7 +135,7 @@ fn full_flow_init_import_list_exec() {
 
     // 1. init
     dotenvz::commands::init::run(Some("full-flow-app"), false).is_err(); // runs in cwd, not tmpdir
-    // Write config directly since we can't change cwd in a safe test.
+                                                                         // Write config directly since we can't change cwd in a safe test.
     let config = DotenvzConfig::scaffold("full-flow-app");
     write_config(&dir.path().join(CONFIG_FILENAME), &config).unwrap();
 
