@@ -2,7 +2,7 @@
 
 > Cross-platform CLI for secure environment injection via the OS secret store.
 
-[![CI](https://github.com/romajs/dotenvz/actions/workflows/ci.yml/badge.svg)](https://github.com/romajs/dotenvz/actions/workflows/ci.yml) [![License: Proprietary](https://img.shields.io/badge/license-Proprietary-red.svg)](LICENSE) [![Rust: stable](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-informational.svg)]()
+[![CI](https://github.com/romajs/dotenvz/actions/workflows/ci.yml/badge.svg)](https://github.com/romajs/dotenvz/actions/workflows/ci.yml) [![Release](https://github.com/romajs/dotenvz/actions/workflows/release.yml/badge.svg)](https://github.com/romajs/dotenvz/releases) [![License: Proprietary](https://img.shields.io/badge/license-Proprietary-red.svg)](LICENSE) [![Rust: stable](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-informational.svg)]()
 
 `dotenvz` is a Rust CLI that stores your project's environment variables in a
 secret backend and injects them into child processes at runtime.
@@ -64,6 +64,28 @@ initial import/bootstrap.
 ---
 
 ## Installation
+
+### Pre-built binaries (recommended)
+
+Download the archive for your platform from the [latest GitHub Release](https://github.com/romajs/dotenvz/releases/latest):
+
+| Platform | Archive |
+|---|---|
+| macOS — Apple Silicon | `dotenvz-{version}-aarch64-apple-darwin.tar.gz` |
+| macOS — Intel x86_64 | `dotenvz-{version}-x86_64-apple-darwin.tar.gz` |
+| Linux — x86_64 | `dotenvz-{version}-x86_64-unknown-linux-gnu.tar.gz` |
+| Windows — x86_64 | `dotenvz-{version}-x86_64-pc-windows-msvc.zip` |
+
+Each archive contains both the `dotenvz` and `dz` binaries. A `.sha256` sidecar is provided for integrity verification:
+
+```bash
+# macOS / Linux
+tar -xzf dotenvz-{version}-{target}.tar.gz
+sha256sum -c dotenvz-{version}-{target}.tar.gz.sha256
+sudo mv dotenvz dz /usr/local/bin/
+```
+
+### Build from source
 
 ```bash
 cargo install --path .
@@ -245,6 +267,23 @@ tests/
   fixtures/            — sample config and .env for tests
   integration_test.rs
 ```
+
+---
+
+## Releasing
+
+> For maintainers only.
+
+1. Bump `version` in `Cargo.toml` (follows [SemVer](https://semver.org))
+2. Commit and push to `main`
+3. Create and push a tag matching the new version:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag push triggers the [release workflow](.github/workflows/release.yml), which builds native binaries for all four platforms in parallel and publishes them to a GitHub Release with SHA256 checksums. The `version` field in `Cargo.toml` is the single source of truth — the git tag must match it prefixed with `v`.
 
 ---
 
