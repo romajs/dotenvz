@@ -36,13 +36,13 @@ fn build_provider(provider: &str) -> errors::Result<Box<dyn SecretProvider>> {
     {
         let _ = provider;
         use dotenvz::providers::linux_secret_service::LinuxSecretServiceProvider;
-        return Ok(Box::new(LinuxSecretServiceProvider::new()));
+        Ok(Box::new(LinuxSecretServiceProvider::new()))
     }
     #[cfg(target_os = "windows")]
     {
         let _ = provider;
         use dotenvz::providers::windows_credential::WindowsCredentialProvider;
-        return Ok(Box::new(WindowsCredentialProvider::new()));
+        Ok(Box::new(WindowsCredentialProvider::new()))
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
