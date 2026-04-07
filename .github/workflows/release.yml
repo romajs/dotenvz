@@ -17,6 +17,8 @@ jobs:
   build:
     name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -24,7 +26,7 @@ jobs:
           - runner: macos-latest
             target: aarch64-apple-darwin
             archive_ext: tar.gz
-          - runner: macos-13
+          - runner: macos-latest
             target: x86_64-apple-darwin
             archive_ext: tar.gz
           - runner: ubuntu-latest
