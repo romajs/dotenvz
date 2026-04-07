@@ -149,14 +149,6 @@ jobs:
             echo "VERSION=${{ github.ref_name }}" >> "$GITHUB_ENV"
           fi
 
-      - name: Generate CHANGELOG.md
-        uses: orhun/git-cliff-action@v4
-        with:
-          config: cliff.toml
-          args: --tag ${{ env.VERSION }}
-        env:
-          OUTPUT: CHANGELOG.md
-
       - name: Generate release notes
         uses: orhun/git-cliff-action@v4
         with:
@@ -164,15 +156,6 @@ jobs:
           args: --latest --strip all
         env:
           OUTPUT: RELEASE_BODY.md
-
-      - name: Commit and push CHANGELOG.md
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git diff --staged --quiet || git commit -m "docs: update CHANGELOG.md for ${{ env.VERSION }}"
-          git push origin HEAD:refs/heads/main
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

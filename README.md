@@ -275,7 +275,20 @@ tests/
 > For maintainers only.
 
 1. Bump `version` in `Cargo.toml` (follows [SemVer](https://semver.org))
-2. Commit and push to `main`
+2. Update `CHANGELOG.md` locally using [git-cliff](https://git-cliff.org):
+
+```bash
+git cliff --unreleased --prepend CHANGELOG.md
+```
+
+Edit the generated entries if needed, then commit everything:
+
+```bash
+git add Cargo.toml CHANGELOG.md
+git commit -m "docs: update CHANGELOG.md for v0.2.0"
+git push
+```
+
 3. Create and push a tag matching the new version:
 
 ```bash
@@ -283,7 +296,9 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-The tag push triggers the [release workflow](.github/workflows/release.yml), which builds native binaries for all four platforms in parallel and publishes them to a GitHub Release with SHA256 checksums. The `version` field in `Cargo.toml` is the single source of truth — the git tag must match it prefixed with `v`.
+The tag push triggers the [release workflow](.github/workflows/release.yml), which builds native binaries for all 7 platforms in parallel, generates the GitHub Release body from the tag's commits via git-cliff, and publishes a single GitHub Release with all archives and SHA256 checksums.
+
+The `version` field in `Cargo.toml` is the single source of truth — the git tag must match it prefixed with `v`.
 
 ---
 
