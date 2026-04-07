@@ -30,6 +30,7 @@ shell-words = "1"
 # macOS Keychain — Security.framework generic password APIs.
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "2"
+security-framework-sys = "2"
 core-foundation = "0.9"
 
 # Linux Secret Service — D-Bus / GNOME Keyring / KWallet via pure-Rust zbus.

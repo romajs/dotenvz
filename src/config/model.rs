@@ -44,6 +44,7 @@ pub struct DotenvzConfig {
 }
 
 const KNOWN_PROVIDERS: &[&str] = &[
+    "macos-passwords",
     "macos-keychain",
     "linux-secret-service",
     "windows-credential",
@@ -51,7 +52,7 @@ const KNOWN_PROVIDERS: &[&str] = &[
 
 fn default_provider() -> String {
     if cfg!(target_os = "macos") {
-        "macos-keychain"
+        "macos-passwords"
     } else if cfg!(target_os = "linux") {
         "linux-secret-service"
     } else if cfg!(target_os = "windows") {
@@ -140,7 +141,28 @@ mod tests {
         cfg.provider = "vault".to_string();
         let err = cfg.validate().unwrap_err();
         assert!(err.to_string().contains("vault"));
-        assert!(err.to_string().contains("macos-keychain"));
+        assert!(err.to_string().contains("macos-passwords"));
+    }
+
+    #[test]
+    fn macos_passwords_provider_is_valid() {
+        let mut cfg = DotenvzConfig::scaffold("my-app");
+        cfg.provider = "macos-passwords".to_string();
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn macos_keychain_provider_is_valid() {
+        let mut cfg = DotenvzConfig::scaffold("my-app");
+        cfg.provider = "macos-keychain".to_string();
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_default_provider_is_macos_passwords() {
+        let cfg = DotenvzConfig::scaffold("my-app");
+        assert_eq!(cfg.provider, "macos-passwords");
     }
 
     #[test]

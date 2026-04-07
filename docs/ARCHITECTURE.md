@@ -31,7 +31,8 @@ completely provider-agnostic.
 | `core/env_resolver.rs` | Calls `provider.list_secrets()` and returns the env map for injection. |
 | `core/process_runner.rs` | Spawns child processes with inherited env + injected secrets overlaid. |
 | `providers/secret_provider.rs` | `SecretProvider` trait: `set_secret`, `get_secret`, `list_secrets`, `delete_secret`. |
-| `providers/macos_keychain.rs` | macOS provider — Apple Keychain via `security-framework`. Real impl on macOS; returns `UnsupportedPlatform` elsewhere. |
+| `providers/macos_passwords.rs` | macOS default provider — iCloud Keychain / Passwords.app (`kSecAttrSynchronizable`) with silent local-Keychain fallback. Real impl on macOS; stub elsewhere. |
+| `providers/macos_keychain.rs` | macOS local-only provider — login Keychain via `security-framework`. Real impl on macOS; stub elsewhere. |
 | `providers/linux_secret_service.rs` | Linux provider — Secret Service D-Bus via `secret-service` (blocking). Real impl on Linux; stub elsewhere. |
 | `providers/windows_credential.rs` | Windows provider — Credential Manager via `windows-sys` Win32 FFI. Real impl on Windows; stub elsewhere. |
 | `providers/exec.rs` | Exec provider — spawns a subprocess and communicates over a JSON stdin/stdout protocol. Cross-platform. |
@@ -59,6 +60,7 @@ dotenvz dev
     │     │     b. top-level config.provider
     │     │
     │     ├─ built-in name? (KNOWN_PROVIDERS)
+    │     │     "macos-passwords"     → MacOsPasswordsProvider::new()  ← new default
     │     │     "macos-keychain"      → MacOsKeychainProvider::new()
     │     │     "linux-secret-service"→ LinuxSecretServiceProvider::new()
     │     │     "windows-credential"  → WindowsCredentialProvider::new()
@@ -134,7 +136,22 @@ correct provider string for the host OS at compile time.
 
 ### OS provider storage layouts
 
-**macOS — Apple Keychain**
+**macOS — iCloud Keychain / Passwords.app (`macos-passwords`, default)**
+```
+kSecAttrService        = "dotenvz.<project>.<profile>"
+kSecAttrAccount        = "<key>"
+kSecValueData          = "<value>" (UTF-8)
+kSecAttrSynchronizable = true  ← synced via iCloud; appears in Passwords.app
+
+Fallback: if iCloud is unavailable, the same layout is written to the local
+login Keychain without the synchronizable flag.
+
+Sentinel registry account (for list_secrets — same as macos-keychain):
+  kSecAttrAccount = "__dotenvz_idx__"  → newline-separated key names
+  (stored with kSecAttrSynchronizable = true; local copy maintained on fallback)
+```
+
+**macOS — local login Keychain (`macos-keychain`)**
 ```
 kSecAttrService = "dotenvz.<project>.<profile>"
 kSecAttrAccount = "<key>"

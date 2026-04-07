@@ -61,6 +61,26 @@ Practical implementation roadmap. Items are ordered roughly by dependency.
 
 ---
 
+## Phase 3b — macOS Passwords / iCloud Keychain provider
+
+- [x] Add `MacOsPasswordsProvider` (`providers/macos_passwords.rs`) using `security-framework-sys` raw SecItem FFI
+- [x] Store secrets as synchronizable items (`kSecAttrSynchronizable = kCFBooleanTrue`)
+- [x] Silent fallback to local login Keychain on iCloud-unavailable error codes (-25291, -34018, -25308)
+- [x] Key registry pattern identical to `MacOsKeychainProvider`
+- [x] `macos-passwords` is now the default provider on macOS (`config/model.rs`)
+- [x] `build_provider()` in `main.rs` dispatches on `"macos-passwords"` vs `"macos-keychain"`
+- [x] Unit tests (service name format, constructibility, non-macOS stubs)
+- [x] Updated all docs: README, ARCHITECTURE, OS_PROVIDERS_OVERVIEW, PROVIDER_SPEC_MACOS
+- [ ] **KNOWN LIMITATION: iCloud sync requires the `com.apple.developer.icloud-keychain`
+       entitlement. Unsigned binaries installed via `cargo install` always receive
+       `errSecMissingEntitlement` (-34018) and transparently fall back to the local
+       login Keychain. Real Passwords.app / iCloud sync is only possible with a
+       Developer ID-signed and notarized binary.**
+- [ ] Investigate code-signing workflow for `cargo install`-able CLI tools (see `docs/SIGNING.md`)
+- [ ] Manual smoke test with a signed binary to confirm Passwords.app visibility
+
+---
+
 ## Phase 4 — `dotenvz import`
 
 - [x] Finish `commands/import.rs` — wire to real Keychain provider
@@ -157,6 +177,8 @@ Practical implementation roadmap. Items are ordered roughly by dependency.
 
 ## Future (post-MVP)
 
+- [ ] Code-sign and notarize release binaries so `macos-passwords` can write real iCloud
+       Keychain items (requires Apple Developer Program enrollment; see `docs/SIGNING.md`)
 - [ ] Profile inheritance (`staging` inherits `dev` and overlays)
 - [ ] Schema validation: warn on missing keys from `schema_file`
 - [ ] `dotenvz diff --profile staging` — compare profiles

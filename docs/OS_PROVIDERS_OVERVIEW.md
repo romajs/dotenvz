@@ -14,11 +14,12 @@ OS providers are used when:
 
 ### Supported OS providers
 
-| Provider key        | Backend                                    | Platform        |
-|---------------------|--------------------------------------------|-----------------|
-| `macos-keychain`    | macOS Keychain (Security.framework)        | macOS           |
-| `linux-secret-service` | Secret Service D-Bus API (GNOME Keyring / KWallet) | Linux      |
-| `windows-credential` | Windows Credential Manager (Win32 Cred*)  | Windows         |
+| Provider key        | Backend                                    | Platform        | Notes |
+|---------------------|--------------------------------------------|-----------------|-------|
+| `macos-passwords`   | iCloud Keychain / macOS Passwords.app      | macOS           | **Default on macOS.** Synchronizable items; falls back to local Keychain if iCloud is unavailable. |
+| `macos-keychain`    | Local login Keychain (Security.framework)  | macOS           | Local-only; no iCloud sync. Use when iCloud sync is undesired. |
+| `linux-secret-service` | Secret Service D-Bus API (GNOME Keyring / KWallet) | Linux      | |
+| `windows-credential` | Windows Credential Manager (Win32 Cred*)  | Windows         | |
 
 ---
 
@@ -54,21 +55,48 @@ This means the same key name (`DATABASE_URL`) can coexist in multiple profiles
 
 ## macOS Keychain
 
+### Providers
+
+There are two macOS providers; the correct one to choose depends on whether iCloud
+sync is desired.
+
+#### `macos-passwords` (default)
+
+The default provider on macOS. Stores secrets as **synchronizable** Generic Password
+items via the Security.framework `SecItem` API with `kSecAttrSynchronizable = true`.
+Synchronizable items are synced via iCloud Keychain and appear in the macOS
+**Passwords** app on macOS 15 and later.
+
+If iCloud is unavailable (iCloud turned off, running in CI, `errSecMissingEntitlement`,
+etc.) each operation transparently falls back to the local login Keychain. No error is
+raised; the provider is silent about the fallback.
+
+#### `macos-keychain`
+
+Legacy / local-only provider. Stores secrets in the login Keychain **without** the
+synchronizable flag. Secrets are never synced to iCloud. Use this provider when:
+- iCloud sync is explicitly undesired.
+- You need compatibility with existing secrets written by an older version of dotenvz.
+- You are running in an environment where iCloud Keychain access would silently fail
+  and you want an explicit local store (no fallback ambiguity).
+
 ### Backend
 
-The macOS provider uses the **Security.framework Generic Password** API via the
-`security-framework` crate. Secrets are stored in the login Keychain (the same store
-used by Safari, Xcode, and system services).
+Both macOS providers use the **Security.framework** API. `macos-passwords` uses the
+raw `SecItem*` FFI functions (via `security-framework-sys`) to set
+`kSecAttrSynchronizable`. `macos-keychain` uses the higher-level
+`security-framework` crate helpers (`set_generic_password`, etc.).
 
 ### Storage layout
 
-Each secret is stored as a **Generic Password** item inside the login Keychain:
+Both macOS providers share the same logical layout:
 
-| Keychain attribute  | Value                         |
-|---------------------|-------------------------------|
-| `kSecAttrService`   | `dotenvz.<project>.<profile>` |
-| `kSecAttrAccount`   | `<key>`                       |
-| `kSecValueData`     | UTF-8 encoded `<value>`       |
+| Keychain attribute  | Value (`macos-passwords`)     | Value (`macos-keychain`)      |
+|---------------------|-------------------------------|-------------------------------|
+| `kSecAttrService`   | `dotenvz.<project>.<profile>` | `dotenvz.<project>.<profile>` |
+| `kSecAttrAccount`   | `<key>`                       | `<key>`                       |
+| `kSecValueData`     | UTF-8 encoded `<value>`       | UTF-8 encoded `<value>`       |
+| `kSecAttrSynchronizable` | `true` (iCloud sync)    | *(not set)*                   |
 
 ### Key registry
 
@@ -91,8 +119,9 @@ Keychain (this is a system-level prompt handled entirely by macOS).
 
 ```toml
 [target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "2"
-core-foundation = "0.9"
+security-framework     = "2"   # high-level helpers (macos-keychain)
+security-framework-sys = "2"   # raw SecItem FFI (macos-passwords)
+core-foundation        = "0.9" # CFDictionary, CFString, CFBoolean, …
 ```
 
 ### Execution flow
@@ -102,17 +131,19 @@ dz set DATABASE_URL postgres://...
       │
       1. service = "dotenvz.<project>.<profile>"
       │
-      2. upsert_password(service, key, value)
-      │     └─ set_generic_password()
-      │           → on errSecDuplicateItem: delete_generic_password() then retry
+      2. sync_upsert(service, key, value)      ← macos-passwords path
+      │     ├─ SecItemAdd(kSecAttrSynchronizable=true)
+      │     ├─ on errSecDuplicateItem: SecItemUpdate
+      │     └─ on iCloud-unavailable error: fall back to local set_generic_password()
       │
-      3. registry_add(service, key)
+      3. registry_add(service, key)             ← same for both providers
             └─ read __dotenvz_idx__, append key, write back
 ```
 
 ### Known trade-offs
 
 - The key registry can drift if items are modified directly in Keychain Access.
+- `macos-passwords` items may take a short time to sync to other devices via iCloud.
 - Keychain unlock prompts are controlled by macOS and cannot be suppressed by dotenvz.
 - Items persist across user logout; they are tied to the login Keychain, not the session.
 
@@ -254,14 +285,14 @@ dz set DATABASE_URL postgres://...
 
 ## Cross-Platform Behaviour Summary
 
-| Operation        | macOS Keychain                     | Linux Secret Service              | Windows Credential Manager         |
-|------------------|------------------------------------|-----------------------------------|-------------------------------------|
-| `set_secret`     | `set_generic_password` (upsert)    | `collection.create_item(replace)` | `CredWriteW`                        |
-| `get_secret`     | `get_generic_password`             | `collection.search_items` (first) | `CredReadW`                         |
-| `list_secrets`   | registry lookup + multi-get        | `collection.search_items` (all)   | `CredEnumerateW` (wildcard prefix)  |
-| `delete_secret`  | `delete_generic_password`          | `item.delete()`                   | `CredDeleteW`                       |
-| Key enumeration  | Explicit registry (`__dotenvz_idx__`) | Native attribute search        | Native prefix wildcard              |
-| Non-native OS    | Returns `UnsupportedPlatform`      | Returns `UnsupportedPlatform`     | Returns `UnsupportedPlatform`       |
+| Operation        | macOS (`macos-passwords`)          | macOS (`macos-keychain`)           | Linux Secret Service              | Windows Credential Manager         |
+|------------------|------------------------------------|------------------------------------|-----------------------------------|-------------------------------------|
+| `set_secret`     | `SecItemAdd` (sync) + local fallback | `set_generic_password` (upsert)  | `collection.create_item(replace)` | `CredWriteW`                        |
+| `get_secret`     | `SecItemCopyMatching` (sync) → local fallback | `get_generic_password`  | `collection.search_items` (first) | `CredReadW`                         |
+| `list_secrets`   | sync registry + local registry, multi-get | registry lookup + multi-get | `collection.search_items` (all)   | `CredEnumerateW` (wildcard prefix)  |
+| `delete_secret`  | `SecItemDelete` (sync) + local delete | `delete_generic_password`       | `item.delete()`                   | `CredDeleteW`                       |
+| Key enumeration  | `__dotenvz_idx__` registry         | `__dotenvz_idx__` registry         | Native attribute search            | Native prefix wildcard              |
+| Non-native OS    | Returns `UnsupportedPlatform`      | Returns `UnsupportedPlatform`      | Returns `UnsupportedPlatform`     | Returns `UnsupportedPlatform`       |
 
 ---
 
@@ -279,7 +310,8 @@ dotenvz exec -- my-service
       2. build_provider(&ctx)
       │     └─ read ctx.config.provider (or profile-level override)
       │     └─ match compile target:
-      │           cfg(target_os = "macos")   → MacOsKeychainProvider
+      │           cfg(target_os = "macos")   → MacOsPasswordsProvider  ("macos-passwords")
+      │                                         MacOsKeychainProvider   ("macos-keychain")
       │           cfg(target_os = "linux")   → LinuxSecretServiceProvider
       │           cfg(target_os = "windows") → WindowsCredentialProvider
       │

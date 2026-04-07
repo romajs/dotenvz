@@ -18,25 +18,37 @@ fn main() {
     }
 }
 
-/// Instantiate the active secret provider for the current platform.
-fn build_provider() -> errors::Result<Box<dyn SecretProvider>> {
+/// Instantiate the active secret provider based on platform and config.
+fn build_provider(provider: &str) -> errors::Result<Box<dyn SecretProvider>> {
     #[cfg(target_os = "macos")]
     {
         use dotenvz::providers::macos_keychain::MacOsKeychainProvider;
-        Ok(Box::new(MacOsKeychainProvider::new()))
+        use dotenvz::providers::macos_passwords::MacOsPasswordsProvider;
+        match provider {
+            "macos-passwords" => Ok(Box::new(MacOsPasswordsProvider::new())),
+            "macos-keychain" => Ok(Box::new(MacOsKeychainProvider::new())),
+            other => Err(DotenvzError::ConfigParse(format!(
+                "Unknown provider `{other}` on macOS. Expected `macos-passwords` or `macos-keychain`."
+            ))),
+        }
     }
     #[cfg(target_os = "linux")]
     {
+        let _ = provider;
         use dotenvz::providers::linux_secret_service::LinuxSecretServiceProvider;
-        Ok(Box::new(LinuxSecretServiceProvider::new()))
+        return Ok(Box::new(LinuxSecretServiceProvider::new()));
     }
     #[cfg(target_os = "windows")]
     {
+        let _ = provider;
         use dotenvz::providers::windows_credential::WindowsCredentialProvider;
-        Ok(Box::new(WindowsCredentialProvider::new()))
+        return Ok(Box::new(WindowsCredentialProvider::new()));
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    Err(DotenvzError::UnsupportedPlatform)
+    {
+        let _ = provider;
+        Err(DotenvzError::UnsupportedPlatform)
+    }
 }
 
 fn run() -> errors::Result<()> {
@@ -51,7 +63,7 @@ fn run() -> errors::Result<()> {
     let ctx = ProjectContext::resolve(cli.profile.as_deref())?;
 
     // Build the active secret provider.
-    let provider = build_provider()?;
+    let provider = build_provider(&ctx.config.provider)?;
 
     match cli.command {
         Commands::Init { .. } => unreachable!("handled above"),

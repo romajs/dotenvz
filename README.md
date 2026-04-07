@@ -13,7 +13,7 @@ initial import/bootstrap.
 
 | Platform | Secret backend |
 |----------|----------------|
-| macOS    | Apple Keychain (`security-framework`) |
+| macOS    | iCloud Keychain / Passwords.app (`macos-passwords`, default) or local-only login Keychain (`macos-keychain`) |
 | Linux    | Secret Service via D-Bus (`secret-service` crate) |
 | Windows  | Credential Manager (`windows-sys` Win32 API) |
 
@@ -77,7 +77,7 @@ Place a `.dotenvz.toml` in your project root. Run `dotenvz init` to scaffold one
 
 ```toml
 project = "my-app"
-provider = "macos-keychain"
+provider = "macos-passwords"
 default_profile = "dev"
 schema_file = ".env.example"
 import_file = ".env"
@@ -92,7 +92,7 @@ test  = "cargo test"
 | Field | Description |
 |---|---|
 | `project` | Unique identifier used as the secret namespace |
-| `provider` | Default backend — `"macos-keychain"`, `"linux-secret-service"`, or `"windows-credential"` (auto-set by `dotenvz init`) |
+| `provider` | Secret backend — `"macos-passwords"` (macOS default, iCloud Keychain / Passwords.app with local fallback), `"macos-keychain"` (local-only login Keychain), `"linux-secret-service"`, or `"windows-credential"` (auto-set by `dotenvz init`) |
 | `default_profile` | Profile used when `--profile` is not specified |
 | `schema_file` | Path to a file listing expected keys (future validation) |
 | `import_file` | `.env` file used by `dotenvz import` |
@@ -173,13 +173,23 @@ dotenvz --profile staging exec -- ./deploy.sh
 Secrets are isolated by project **and** profile, so `DATABASE_URL` can coexist
 safely across `dev`, `staging`, and `production` on all platforms.
 
-### macOS — Apple Keychain
+### macOS — iCloud Keychain / Passwords.app (`macos-passwords`)
+
+Secrets are stored as **synchronizable** Generic Password items, making them visible
+in the macOS **Passwords** app and synced via iCloud Keychain across your devices.
+If iCloud is unavailable the provider falls back to the local login Keychain silently.
 
 | Keychain attribute | Value |
 |---|---|
 | Service (`kSecAttrService`) | `dotenvz.<project>.<profile>` |
 | Account (`kSecAttrAccount`) | The env key (e.g. `DATABASE_URL`) |
 | Password (`kSecValueData`) | The env value (UTF-8) |
+| Synchronizable (`kSecAttrSynchronizable`) | `true` (iCloud sync) |
+
+### macOS — Local Keychain only (`macos-keychain`)
+
+Set `provider = "macos-keychain"` to store in the local login Keychain only (no iCloud sync).
+Layout is identical to `macos-passwords` minus the synchronizable flag.
 
 ### Linux — Secret Service (D-Bus / GNOME Keyring / KWallet)
 
@@ -219,11 +229,12 @@ src/
   config/              — .dotenvz.toml model + loader
   core/                — project context, resolver, process runner
   providers/
-    secret_provider.rs — SecretProvider trait
-    macos_keychain.rs  — macOS Keychain (Security.framework)
+    secret_provider.rs    — SecretProvider trait
+    macos_passwords.rs    — macOS iCloud Keychain / Passwords.app (default)
+    macos_keychain.rs     — macOS local login Keychain
     linux_secret_service.rs — Linux Secret Service (D-Bus)
     windows_credential.rs   — Windows Credential Manager (Win32)
-    mock.rs            — in-memory backend for tests
+    mock.rs               — in-memory backend for tests
 <!--
     exec.rs            — custom exec provider (JSON subprocess protocol)
     aws_secrets_manager.rs  — AWS Secrets Manager

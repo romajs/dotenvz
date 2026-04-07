@@ -1,55 +1,195 @@
-# Provider Spec — macOS Keychain
+# Provider Spec — macOS Providers
 
 ## Overview
 
-`macos-keychain` is the default dotenvz provider on macOS. It stores, retrieves,
-and deletes secrets using the **macOS Security.framework Generic Password API** —
-the same underlying store used by Safari, Xcode, and system services.
+dotenvz ships **two macOS providers** backed by the same Security.framework store:
 
-All operations are fully supported (set, get, list, delete). Secrets never leave
-the local machine and require no cloud account or network access.
+| Provider key     | Storage target               | Default? |
+|------------------|------------------------------|----------|
+| `macos-passwords` | iCloud Keychain (synchronizable items; Passwords.app) | **Yes** (since dotenvz 0.2) |
+| `macos-keychain`  | Local login Keychain only    | No (legacy / local-only) |
 
----
-
-## Configuration
-
-Declare the provider under `[providers.<name>]` in `.dotenvz.toml`.
-The provider name is a local alias; the `type` field identifies the backend.
-
-```toml
-[providers.local]
-type = "macos-keychain"
-```
-
-### Config fields
-
-| Field  | Type   | Required | Description                      |
-|--------|--------|----------|----------------------------------|
-| `type` | string | yes      | Must be `"macos-keychain"`.      |
-
-There are no additional configuration fields. The Keychain service namespace is
-derived automatically from the `project` and `profile` values in the active config.
-
-### Activating the provider for a profile
-
-```toml
-[profiles.dev]
-provider = "local"
-
-[profiles.staging]
-provider = "local"
-```
-
-Since there is only one Keychain per user login, all profiles on the same machine
-share the same physical store. Secrets are isolated by the service namespace
-`dotenvz.<project>.<profile>`, so a key named `DATABASE_URL` in `dev` and the same
-key in `staging` are stored as separate Keychain items and never conflict.
+Both providers implement the full `SecretProvider` interface (`set`, `get`,
+`list`, `delete`) and use the same service-namespace model and key registry
+pattern. The only difference is `kSecAttrSynchronizable`.
 
 ---
 
-## Secret Storage Layout
+## `macos-passwords` — iCloud Keychain / Passwords app
 
-Each secret is stored as a **Generic Password** item in the macOS login Keychain:
+### Overview
+
+`macos-passwords` is the **default macOS provider** written by `dotenvz init`.
+Secrets are stored as **synchronizable** Generic Password items, making them:
+
+- Visible in the macOS **Passwords** app (macOS 15+).
+- Synced via **iCloud Keychain** across your signed-in Apple devices.
+
+If iCloud Keychain is unavailable (iCloud signed out, `errSecMissingEntitlement`,
+CI environment without an iCloud session, etc.) every operation silently falls
+back to the **local login Keychain** using the identical service/account namespace.
+No error is raised; callers cannot distinguish which store was used.
+
+### Configuration
+
+```toml
+provider = "macos-passwords"
+```
+
+This is written automatically by `dotenvz init` on macOS.
+
+### Secret storage layout
+
+| Keychain attribute        | Value                          |
+|---------------------------|--------------------------------|
+| `kSecAttrService`         | `dotenvz.<project>.<profile>`  |
+| `kSecAttrAccount`         | `<key>`                        |
+| `kSecValueData`           | UTF-8 encoded `<value>`        |
+| `kSecAttrSynchronizable`  | `kCFBooleanTrue`               |
+
+On iCloud-unavailable fallback the item is written to the local Keychain **without**
+`kSecAttrSynchronizable`. The key registry (see below) is likewise written to the
+best available store.
+
+### Operation flows
+
+#### set_secret
+
+```
+dz set DATABASE_URL "postgres://localhost/mydb"
+      │
+      1. service = "dotenvz.<project>.<profile>"
+      │
+      2. sync_upsert(service, key, value)
+      │     ├─ SecItemAdd({kSecAttrSynchronizable=true, …})
+      │     ├─ on errSecDuplicateItem (-25299):
+      │     │     SecItemUpdate(query, {kSecValueData=value})
+      │     └─ on iCloud-unavailable (-25291, -34018, -25308):
+      │           fall back to local upsert_password(service, key, value)
+      │
+      3. registry_add(service, key)
+            └─ read_registry (sync first, then local)
+            └─ append key if absent, write_registry (sync first, then local)
+```
+
+#### get_secret
+
+```
+dz get DATABASE_URL
+      │
+      1. service = "dotenvz.<project>.<profile>"
+      │
+      2. SecItemCopyMatching({kSecAttrSynchronizable=true, kSecReturnData=true})
+      │     ├─ on errSecItemNotFound: continue to step 3
+      │     └─ on iCloud-unavailable error: continue to step 3
+      │
+      3. (local fallback) get_generic_password(service, key)
+      │     └─ on errSecItemNotFound: DotenvzError::KeyNotFound
+      │
+      4. UTF-8 decode bytes → return value string
+```
+
+#### list_secrets
+
+```
+dz list
+      │
+      1. service = "dotenvz.<project>.<profile>"
+      │
+      2. read_registry(service) → [KEY1, KEY2, …]
+      │     (tries sync __dotenvz_idx__ first, then local)
+      │
+      3. for each key:
+      │     get_secret → sync lookup then local fallback
+      │       → KeyNotFound: skip (stale registry entry)
+      │       → error: propagate
+      │
+      4. return HashMap<key, value>
+```
+
+#### delete_secret
+
+```
+dz rm DATABASE_URL
+      │
+      1. service = "dotenvz.<project>.<profile>"
+      │
+      2. SecItemDelete({kSecAttrSynchronizable=true})
+      │     ├─ on errSecItemNotFound: note not found in iCloud (continue)
+      │     └─ on iCloud-unavailable: note unavailable (continue)
+      │
+      3. delete_generic_password(service, key)   ← local arm
+      │     └─ on errSecItemNotFound: note not found locally
+      │
+      4. if both not-found: DotenvzError::KeyNotFound
+      │
+      5. registry_remove(service, key)
+```
+
+### iCloud fallback error codes
+
+The following Security.framework status codes are treated as "iCloud unavailable"
+and trigger the local-Keychain fallback. All other non-zero codes are surfaced as
+`DotenvzError::Provider`.
+
+| Status code | Constant                   | Trigger scenario |
+|-------------|----------------------------|------------------|
+| -25291      | `errSecNotAvailable`       | iCloud Keychain service unavailable |
+| -34018      | `errSecMissingEntitlement` | App lacks iCloud Keychain entitlement |
+| -25308      | `errSecInteractionNotAllowed` | Headless / no UI context |
+
+### Visibility in Passwords.app
+
+Synchronizable items written by `macos-passwords` appear in **Settings → Passwords**
+(macOS 15) or the **Passwords** app under:
+- **Website:** `dotenvz.<project>.<profile>`
+- **Username / Account:** the key name (e.g. `DATABASE_URL`)
+
+The key registry sentinel (`__dotenvz_idx__`) is also visible. It should not be
+deleted manually while dotenvz-managed secrets exist for that project/profile.
+
+### Known limitation — iCloud entitlement required
+
+> **`macos-passwords` currently always falls back to the local login Keychain
+> when installed via `cargo install`.**
+
+macOS requires the `com.apple.developer.icloud-keychain` entitlement to write
+synchronizable Keychain items. Unsigned or ad-hoc-signed binaries receive
+`errSecMissingEntitlement` (-34018) from Security.framework, which the provider
+treats as an iCloud-unavailable condition and silently falls back to the local
+login Keychain.
+
+To use the real Passwords.app / iCloud sync path the binary must be:
+1. Signed with a **Developer ID Application** certificate
+2. Built with an entitlements plist containing `com.apple.developer.icloud-keychain = true`
+3. **Notarized** by Apple for distribution outside the App Store
+
+Until a signed release is available, `macos-passwords` and `macos-keychain` are
+functionally identical for `cargo install`-built binaries. Secrets are stored
+safely in the local login Keychain either way.
+
+---
+
+## `macos-keychain` — Local Login Keychain
+
+### Overview
+
+`macos-keychain` is the legacy provider. It stores secrets in the **local login
+Keychain** only — no iCloud sync, no Passwords.app visibility.
+
+Use this provider when:
+- iCloud sync is explicitly undesired.
+- You need full compatibility with secrets written by dotenvz 0.1.
+- You run in an environment where iCloud is not available and you want no silent
+  fallback ambiguity.
+
+### Configuration
+
+```toml
+provider = "macos-keychain"
+```
+
+### Secret storage layout
 
 | Keychain attribute  | Value                         |
 |---------------------|-------------------------------|
@@ -64,19 +204,22 @@ The service name format is: `dotenvz.<project>.<profile>`.
 
 ---
 
-## Key Registry
+## Key Registry (both providers)
 
 macOS Keychain does not expose a native "list all accounts for a service" API
 without CoreFoundation type-casting. To support `list_secrets` efficiently,
-the provider maintains a **key registry**: a newline-delimited list of key names
-stored as a single Keychain item under the sentinel account `__dotenvz_idx__`
-within the same service namespace.
+both macOS providers maintain a **key registry**: a newline-delimited list of
+key names stored as a single Keychain item under the sentinel account
+`__dotenvz_idx__` within the same service namespace.
 
 | Keychain attribute  | Value                         |
 |---------------------|-------------------------------|
 | `kSecAttrService`   | `dotenvz.<project>.<profile>` |
 | `kSecAttrAccount`   | `__dotenvz_idx__`             |
 | `kSecValueData`     | newline-separated key names   |
+
+For `macos-passwords`, the registry entry is also synchronizable. On fallback,
+a local-keychain registry entry is maintained in parallel.
 
 The registry is updated on every `set_secret` and `delete_secret` call:
 
@@ -91,7 +234,7 @@ the affected key.
 
 ---
 
-## Operation Flow
+## Operation Flows (`macos-keychain`)
 
 ### set_secret
 
@@ -157,7 +300,7 @@ dz rm DATABASE_URL
 
 ---
 
-## Authentication
+## Authentication (both providers)
 
 No authentication configuration is required. Access is controlled by the macOS
 user session. The Keychain is unlocked automatically for the logged-in user.
@@ -174,23 +317,23 @@ outside dotenvz's control.
 
 ---
 
-## Error Handling
+## Error Handling (both providers)
 
-| Condition                              | dotenvz error                  | Notes                                                         |
-|----------------------------------------|--------------------------------|---------------------------------------------------------------|
-| Key does not exist                     | `DotenvzError::KeyNotFound`    | `errSecItemNotFound` (-25300) from Security.framework         |
-| Keychain is locked / access denied     | `DotenvzError::Provider("…")` | OS may display an unlock dialog; error returned if dismissed  |
-| Secret value is not valid UTF-8        | `DotenvzError::Provider("…")` | Binary data stored by another app under the same account      |
-| Keychain item already exists (upsert)  | handled internally             | Delete-then-rewrite; never surfaced to the caller             |
-| Registry read returns invalid UTF-8    | returns empty key list         | Treated as empty registry; next write reconciles              |
-| Provider called on non-macOS platform  | `DotenvzError::UnsupportedPlatform` | Stub implementation returns this on Linux / Windows      |
+| Condition | `macos-passwords` | `macos-keychain` |
+|-----------|-------------------|------------------|
+| Key not found | `DotenvzError::KeyNotFound` (checks iCloud then local) | `DotenvzError::KeyNotFound` |
+| iCloud unavailable | falls back to local silently | N/A |
+| iCloud SecItem error (non-fallback code) | `DotenvzError::Provider("SecItem error (N)…")` | N/A |
+| Keychain locked / access denied | `DotenvzError::Provider("…")` | `DotenvzError::Provider("…")` |
+| Secret not valid UTF-8 | `DotenvzError::Provider("Invalid UTF-8…")` | `DotenvzError::Provider("Invalid UTF-8…")` |
+| Upsert duplicate (handled) | transparent | transparent |
+| Provider on non-macOS | `DotenvzError::UnsupportedPlatform` | `DotenvzError::UnsupportedPlatform` |
 
-All `DotenvzError::Provider` payloads include the original Security.framework OSStatus
-code. Secret values are never included in error messages.
+Secret values are never included in error messages.
 
 ---
 
-## Key Name Constraints
+## Key Name Constraints (both providers)
 
 | Constraint                      | Detail                                                             |
 |---------------------------------|--------------------------------------------------------------------|
@@ -202,30 +345,35 @@ code. Secret values are never included in error messages.
 
 ---
 
-## Rust Crate
+## Rust Crates
 
 ```toml
 [target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "2"
-core-foundation     = "0.9"
+security-framework     = "2"   # high-level password helpers (macos-keychain)
+security-framework-sys = "2"   # raw SecItem FFI (macos-passwords)
+core-foundation        = "0.9" # CFDictionary, CFString, CFBoolean
 ```
-
-The `security-framework` crate provides safe Rust bindings for the macOS
-Security.framework C API. No system libraries need to be installed separately;
-Security.framework ships with every macOS installation.
 
 ---
 
-## Visibility in Keychain Access
+## Visibility in Keychain Access / Passwords.app
 
-Secrets stored by dotenvz are visible in the **Keychain Access** application
-(Applications → Utilities → Keychain Access) under the login Keychain. Items appear
-with:
+### `macos-passwords`
+
+Synchronizable items appear in:
+- **Passwords.app** (macOS 15+) or **Settings → Passwords** under an entry whose
+  website field is `dotenvz.<project>.<profile>` and username is the key name.
+- **Keychain Access** (login keychain) as application passwords when the iCloud
+  fallback path was used.
+
+### `macos-keychain`
+
+Items appear in **Keychain Access** under the login Keychain:
 
 - **Kind:** application password
 - **Where:** `dotenvz.<project>.<profile>`
 - **Account:** the key name (e.g. `DATABASE_URL`)
 
-The key registry sentinel item (`__dotenvz_idx__`) is also visible in Keychain Access
-with the account name `__dotenvz_idx__`. It should not be deleted manually while
+For both providers, the key registry sentinel item (`__dotenvz_idx__`) is visible
+with account name `__dotenvz_idx__`. It should not be deleted manually while
 dotenvz-managed secrets exist for that project/profile.

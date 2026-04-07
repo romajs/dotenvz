@@ -299,6 +299,7 @@ dependencies = [
  "dotenvy",
  "secret-service",
  "security-framework",
+ "security-framework-sys",
  "serde",
  "shell-words",
  "tempfile",
