@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/dotenvz-icon.png" alt="dotenvz icon" width="128" height="128">
+</p>
+
 # dotenvz
 
 > Cross-platform CLI for secure environment injection via the OS secret store.
@@ -49,6 +53,11 @@ initial import/bootstrap.
 - Named command aliases with automatic env injection (`dotenvz dev`, `dotenvz build`)
 - Explicit exec mode: `dotenvz exec -- <command> [args...]`
 - One-time import from `.env` into the secret store (`dotenvz import`)
+
+## Brand asset
+
+The project icon is versioned at [`assets/dotenvz-icon.png`](assets/dotenvz-icon.png)
+for README, release, and portfolio use.
 
 ## Non-goals
 
