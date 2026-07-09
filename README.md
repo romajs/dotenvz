@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="assets/dotenvz-icon.png" alt="dotenvz icon" width="128" height="128">
-</p>
-
-# dotenvz
+# <img src="assets/dotenvz-icon.png" alt="dotenvz icon" width="28" height="28"> dotenvz
 
 > Cross-platform CLI for secure environment injection via the OS secret store.
 
